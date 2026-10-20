@@ -1,0 +1,515 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+    <meta name="theme-color" content="#0D1117" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+    <title>GymRat — 과학적 체성분 감량 & 식단·운동 대시보드</title>
+    <link rel="manifest" href="manifest.json" />
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/static/pretendard.min.css" />
+    <link rel="stylesheet" href="css/styles.css" />
+</head>
+<body>
+    <main class="app-container">
+        <!-- 상단 헤더 -->
+        <header class="top-header">
+            <div class="brand-title">
+                <span class="brand-badge">PRO CUTTING</span>
+                <h1>GymRat</h1>
+            </div>
+            <div class="header-actions">
+                <button type="button" class="btn-outline-lime js-open-goal-modal">🎯 목표 설정</button>
+                <button type="button" class="btn-primary-orange js-open-body-modal">✏️ 오늘 체성분 입력</button>
+            </div>
+        </header>
+
+        <!-- =================================================================
+             화면 1: 메인 루틴 대시보드 (앳플리 스타일 몸무게 & 주간 목표 + 식단 + 운동)
+             ================================================================= -->
+        <section id="screen-dashboard">
+            <!-- 1. 앳플리(Atflee) 스타일 몸무게 정보 & 스포츠 영양학 주간 안전 감량 목표 카드 -->
+            <article class="card">
+                <div class="card-header-row">
+                    <div>
+                        <h2 class="card-title">몸무게 정보</h2>
+                        <p id="latest-record-date" class="card-subtitle">최근 기록일: -</p>
+                    </div>
+                </div>
+
+                <!-- 좌: 현재 몸무게 / 우: 이번 주 안전 감량 목표까지 -->
+                <div class="atflee-dual-grid">
+                    <div class="atflee-box-orange js-open-body-modal" title="클릭하여 오늘 체성분 입력">
+                        <span class="box-caption">현재 몸무게</span>
+                        <div>
+                            <span id="atflee-current-weight" class="box-main-number">104.40</span>
+                            <span class="box-unit">kg</span>
+                        </div>
+                        <span class="box-hint">터치하여 오늘 측정값 입력</span>
+                    </div>
+
+                    <div class="atflee-box-white js-open-goal-modal" title="클릭하여 내 감량 목표 설정">
+                        <span class="box-caption-dark">이번 주 목표까지</span>
+                        <div>
+                            <span id="atflee-weekly-remaining" class="box-target-number">- 0.58</span>
+                            <span class="box-unit-orange">kg</span>
+                        </div>
+                        <span id="atflee-weekly-sub1" class="box-sub1">주간 권장 -0.78kg</span>
+                        <span id="atflee-weekly-sub2" class="box-sub2">최종 90.0kg까지 -14.40kg</span>
+                    </div>
+                </div>
+
+                <!-- 지난 번 대비 -->
+                <h3 class="delta-section-title">지난 번 대비</h3>
+                <div class="delta-three-cols">
+                    <div class="delta-col">
+                        <span class="delta-label">몸무게</span>
+                        <strong id="delta-weight" class="delta-val">-0.20</strong><span class="delta-unit">kg</span>
+                    </div>
+                    <div class="delta-divider"></div>
+                    <div class="delta-col">
+                        <span class="delta-label">골격근량</span>
+                        <strong id="delta-muscle" class="delta-val">-0.17</strong><span class="delta-unit">kg</span>
+                    </div>
+                    <div class="delta-divider"></div>
+                    <div class="delta-col">
+                        <span class="delta-label">체지방량</span>
+                        <strong id="delta-fat-mass" class="delta-val">-0.06</strong><span class="delta-unit">kg</span>
+                    </div>
+                </div>
+
+                <!-- 요약 / 보고서 탭 -->
+                <div class="sub-tab-bar">
+                    <button type="button" id="tab-btn-atflee-summary" class="sub-tab-btn active">요약</button>
+                    <button type="button" id="tab-btn-atflee-science" class="sub-tab-btn">보고서 (주간 감량 과학)</button>
+                </div>
+
+                <!-- 탭 1: 요약 테이블 -->
+                <div id="panel-atflee-summary">
+                    <div class="atflee-table-head">
+                        <span>체성분</span>
+                        <span>측정값 (목표)</span>
+                        <span>건강·방어 상태</span>
+                    </div>
+                    <div id="atflee-summary-rows"></div>
+                </div>
+
+                <!-- 탭 2: 의학 & 스포츠 영양학 주간 안전 감량 리포트 -->
+                <div id="panel-atflee-science" class="science-box hidden">
+                    <h4 id="science-coaching-title">이번 주 권장 감량 목표</h4>
+                    <p id="science-coaching-detail"></p>
+                    <div class="progress-meta-row" style="margin-bottom: 6px;">
+                        <span id="science-weekly-progress-label" class="text-blue font-bold">이번 주 감량 달성률</span>
+                        <span id="science-weekly-progress-pct" class="text-lime font-bold">0%</span>
+                    </div>
+                    <div class="progress-track dark-track">
+                        <div id="science-weekly-progress-bar" class="progress-fill bg-lime" style="width: 0%;"></div>
+                    </div>
+                    <ul id="science-meta-bullets" class="science-bullets"></ul>
+                </div>
+            </article>
+
+            <!-- 2. 일일 영양 합계 대시보드 (2,250 kcal & 단백질 160g 방어) -->
+            <article class="card">
+                <div class="kcal-top-row">
+                    <div>
+                        <p id="kcal-header-target" class="card-subtitle">일일 에너지 밸런스 (목표 2,250 kcal)</p>
+                        <div>
+                            <span id="kcal-consumed-val" class="kcal-big-number">0</span>
+                            <span id="kcal-target-val" class="kcal-unit-sub">/ 2,250 kcal</span>
+                        </div>
+                    </div>
+                    <div class="kcal-adjust-pill">
+                        <button type="button" id="btn-kcal-minus" class="btn-kcal-step" title="목표 -50kcal">-</button>
+                        <span>목표 조절</span>
+                        <button type="button" id="btn-kcal-plus" class="btn-kcal-step" title="목표 +50kcal">+</button>
+                    </div>
+                </div>
+
+                <div class="progress-track">
+                    <div id="kcal-progress-bar" class="progress-fill bg-blue" style="width: 0%;"></div>
+                </div>
+                <div class="progress-meta-row">
+                    <span id="kcal-remaining-text" class="text-blue font-bold">남은 섭취 가능 칼로리: 2,250 kcal</span>
+                    <span id="kcal-progress-pct" class="card-subtitle">0%</span>
+                </div>
+
+                <!-- 단백질 160g 방어 하이라이트 배너 -->
+                <div id="protein-defense-banner" class="protein-banner pending">
+                    <h4 id="protein-defense-title">골격근 41kg 방어를 위해 단백질 160g 추가 필요</h4>
+                    <p id="protein-defense-sub">현재 단백질 0g / 목표 160g 이상</p>
+                </div>
+
+                <!-- 탄/단/지 도넛 차트 & 바 게이지 -->
+                <div class="macro-grid">
+                    <div class="donut-wrap">
+                        <canvas id="canvas-macro-donut"></canvas>
+                        <div class="donut-center-label">
+                            <span>단백질</span>
+                            <strong id="donut-protein-val">0g</strong>
+                            <span id="donut-protein-target">/ 160g</span>
+                        </div>
+                    </div>
+
+                    <div class="macro-bars-col">
+                        <div class="macro-bar-item">
+                            <div class="macro-bar-head">
+                                <strong>단백질 (필수 방어)</strong>
+                                <span id="macro-protein-text" class="text-lime font-bold">0g / 160g</span>
+                            </div>
+                            <div class="progress-track">
+                                <div id="macro-protein-bar" class="progress-fill bg-lime" style="width: 0%;"></div>
+                            </div>
+                        </div>
+
+                        <div class="macro-bar-item">
+                            <div class="macro-bar-head">
+                                <strong>탄수화물 (저녁 제한)</strong>
+                                <span id="macro-carbs-text" class="text-warning font-bold">0g / 210g</span>
+                            </div>
+                            <div class="progress-track">
+                                <div id="macro-carbs-bar" class="progress-fill bg-warning" style="width: 0%;"></div>
+                            </div>
+                        </div>
+
+                        <div class="macro-bar-item">
+                            <div class="macro-bar-head">
+                                <strong>지방 (건강한 지방)</strong>
+                                <span id="macro-fat-text" class="text-purple font-bold">0g / 85g</span>
+                            </div>
+                            <div class="progress-track">
+                                <div id="macro-fat-bar" class="progress-fill bg-purple" style="width: 0%;"></div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </article>
+
+            <!-- 3. 아침/점심 고정 루틴 원클릭 등록 -->
+            <article class="card">
+                <h2 class="card-title">원클릭 고정 식단 루틴 등록</h2>
+                <p class="section-sub">매일 반복되는 아침·점심 고정 식단과 부족 단백질 부스터를 원터치로 기록하세요.</p>
+
+                <div class="routine-list">
+                    <div id="routine-card-breakfast" class="routine-item">
+                        <div class="routine-info">
+                            <h4>아침 고정 루틴 (계란 3 + 사과 1 + 쉐이크)</h4>
+                            <p>훈제/삶은 계란 3알 + 사과 1개 + 단백질 쉐이크 1스쿱</p>
+                            <span class="routine-badge text-lime">480 kcal · 단백질 40g · 탄수 32g · 지방 18g</span>
+                        </div>
+                        <button type="button" id="btn-toggle-breakfast" class="btn-routine-action">원클릭 등록</button>
+                    </div>
+
+                    <div id="routine-card-lunch" class="routine-item">
+                        <div class="routine-info">
+                            <h4>점심 고정 루틴 (구내식당 + 카페라떼)</h4>
+                            <p>구내식당 일반식(약 1,026 kcal) + 카페라떼 음료(174 kcal)</p>
+                            <span class="routine-badge text-blue">1,200 kcal · 단백질 28g · 탄수 148g · 지방 44g</span>
+                        </div>
+                        <button type="button" id="btn-toggle-lunch" class="btn-routine-action">원클릭 등록</button>
+                    </div>
+
+                    <div id="routine-card-booster" class="routine-item">
+                        <div class="routine-info">
+                            <h4>단백질 160g 방어용 WPI 쉐이크 1.5스쿱</h4>
+                            <p>아침+점심+저녁 외 부족 단백질(38g) 즉각 보충</p>
+                            <span class="routine-badge text-purple">180 kcal · 단백질 38g · 탄수 3g · 지방 2g</span>
+                        </div>
+                        <button type="button" id="btn-toggle-booster" class="btn-routine-action">원클릭 등록</button>
+                    </div>
+                </div>
+            </article>
+
+            <!-- 4. 저녁 권장 가이드 (초저탄수 + 고단백 + 쌈채소) -->
+            <article class="card">
+                <h2 class="card-title">저녁 권장 가이드 (초저탄수 + 고단백 + 채소)</h2>
+                <p id="dinner-guide-subtitle" class="section-sub">권장 타깃: 550~600 kcal / 단백질 50~55g / 탄수화물 10g 이하 제한</p>
+                <div id="dinner-guide-list" class="routine-list"></div>
+            </article>
+
+            <!-- 5. 일일 필수 영양제 & 수분 섭취 체크리스트 -->
+            <article class="card">
+                <h2 class="card-title">일일 필수 영양제 & 수분 체크리스트</h2>
+
+                <div class="checklist-row">
+                    <div>
+                        <h4>크레아틴 모노하이드레이트 5g</h4>
+                        <p>고중량 스트렝스 유지 & 근세포 수분 보유 필수</p>
+                    </div>
+                    <input type="checkbox" id="switch-creatine" class="toggle-input" />
+                </div>
+
+                <div class="checklist-row">
+                    <div>
+                        <h4>프로바이오틱스 (유산균) 복용</h4>
+                        <p>고단백(160g+) 식단 소화 흡수 및 장 환경 개선</p>
+                    </div>
+                    <input type="checkbox" id="switch-probiotics" class="toggle-input" />
+                </div>
+
+                <div class="water-box">
+                    <div class="progress-meta-row" style="margin-top: 0; margin-bottom: 8px;">
+                        <div>
+                            <h4 style="font-size: 13.5px;">일일 수분 섭취량 (목표 2.5L~3.0L)</h4>
+                            <p style="font-size: 11px; color: var(--text-secondary);">크레아틴 복용 시 최소 2.5L 이상 수분 섭취 필수</p>
+                        </div>
+                        <strong id="water-status-text" class="text-blue">0.00L / 2.8L</strong>
+                    </div>
+                    <div class="progress-track dark-track">
+                        <div id="water-progress-bar" class="progress-fill bg-blue" style="width: 0%;"></div>
+                    </div>
+                    <div class="water-btn-row">
+                        <button type="button" id="btn-water-250" class="btn-water text-blue">+250ml (한 컵)</button>
+                        <button type="button" id="btn-water-500" class="btn-water text-lime">+500ml (생수병)</button>
+                        <button type="button" id="btn-water-reset" class="btn-water">초기화</button>
+                    </div>
+                </div>
+            </article>
+
+            <!-- 6. 주 4회 운동 프로그램 가이드 & 천국의 계단 체크 -->
+            <article class="card">
+                <div class="card-header-row">
+                    <div>
+                        <h2 class="card-title">주 4회 운동 루틴 & 천국의 계단</h2>
+                        <p id="weekly-workout-badge" class="section-sub text-lime font-bold">이번 주 운동 달성: 0일 / 목표 4회</p>
+                    </div>
+                    <button type="button" id="btn-open-workout-modal" class="btn-outline-lime">+ 세트 기록</button>
+                </div>
+
+                <div class="checklist-row">
+                    <div>
+                        <h4>대근육 헬스 기구 웨이트 50분 세션</h4>
+                        <p>가슴·등·하체·어깨 머신 중심 점진적 과부하</p>
+                    </div>
+                    <input type="checkbox" id="check-weight-50m" class="toggle-input" />
+                </div>
+
+                <div class="checklist-row">
+                    <div>
+                        <h4>천국의 계단 (StairMaster) 7~10분 인터벌</h4>
+                        <p>웨이트 직후 짧고 강렬한 EPOC 심폐 유산소 마무리</p>
+                    </div>
+                    <input type="checkbox" id="check-stairmaster" class="toggle-input" />
+                </div>
+
+                <div id="workout-sets-list" style="margin-top: 10px;"></div>
+            </article>
+        </section>
+
+        <!-- =================================================================
+             화면 2: 체중 · 골격근량 · 체지방 변화 그래프 화면
+             ================================================================= -->
+        <section id="screen-graph" class="hidden">
+            <article class="card">
+                <div class="card-header-row">
+                    <div>
+                        <p class="card-subtitle">184cm · 체성분 리컴포지션 프로젝트</p>
+                        <h2 class="card-title">체중 & 골격근량 추이 그래프</h2>
+                    </div>
+                    <button type="button" class="btn-primary-orange js-open-body-modal">+ 인바디 기록</button>
+                </div>
+
+                <div class="progress-meta-row" style="margin-bottom: 6px;">
+                    <span id="graph-header-progress-text" class="text-blue font-bold">시작 104.60kg → 현재 104.40kg</span>
+                    <span id="graph-header-remain-text" class="text-lime font-bold">목표까지 -14.40kg</span>
+                </div>
+                <div class="progress-track">
+                    <div id="graph-header-progress-bar" class="progress-fill bg-blue" style="width: 0%;"></div>
+                </div>
+            </article>
+
+            <!-- 차트 모드 탭 & 기간 필터 -->
+            <div class="filter-chips-row">
+                <button type="button" class="chip-btn active" data-chart-tab="OVERLAY">체중 + 골격근 오버레이</button>
+                <button type="button" class="chip-btn" data-chart-tab="WEIGHT_ONLY">체중 (kg)</button>
+                <button type="button" class="chip-btn" data-chart-tab="MUSCLE_ONLY">골격근량 (kg)</button>
+                <button type="button" class="chip-btn" data-chart-tab="BODY_FAT_ONLY">체지방률 (%)</button>
+            </div>
+
+            <div class="period-bar">
+                <button type="button" class="period-btn" data-chart-period="7">1주</button>
+                <button type="button" class="period-btn active" data-chart-period="30">1개월</button>
+                <button type="button" class="period-btn" data-chart-period="90">3개월</button>
+                <button type="button" class="period-btn" data-chart-period="180">6개월</button>
+                <button type="button" class="period-btn" data-chart-period="ALL">전체</button>
+            </div>
+
+            <!-- 인터랙티브 꺾은선 차트 카드 -->
+            <article class="card">
+                <div class="chart-tooltip-box">
+                    <div>
+                        <strong id="chart-tooltip-date" style="font-size: 12.5px;">측정일: -</strong>
+                        <p id="chart-tooltip-memo" style="font-size: 11px; color: var(--text-secondary);">-</p>
+                    </div>
+                    <div class="tooltip-metrics">
+                        <div>
+                            <span class="text-blue">체중</span>
+                            <strong id="chart-tooltip-weight" class="text-blue">-</strong>
+                        </div>
+                        <div>
+                            <span class="text-lime">골격근</span>
+                            <strong id="chart-tooltip-muscle" class="text-lime">-</strong>
+                        </div>
+                        <div>
+                            <span class="text-warning">체지방량</span>
+                            <strong id="chart-tooltip-fat" class="text-warning">-</strong>
+                        </div>
+                    </div>
+                </div>
+
+                <div style="width: 100%; overflow: hidden;">
+                    <canvas id="canvas-body-chart"></canvas>
+                </div>
+            </article>
+
+            <h3 class="card-title" style="margin: 8px 4px 12px;">체성분 측정 히스토리</h3>
+            <div id="weight-history-list"></div>
+        </section>
+    </main>
+
+    <!-- 하단 고정 네비게이션 -->
+    <nav class="bottom-nav">
+        <div class="bottom-nav-inner">
+            <button type="button" id="nav-btn-dashboard" class="nav-item active">
+                <span>📊</span>
+                <span>루틴 대시보드</span>
+            </button>
+            <button type="button" id="nav-btn-graph" class="nav-item">
+                <span>📈</span>
+                <span>체성분 그래프</span>
+            </button>
+        </div>
+    </nav>
+
+    <!-- =================================================================
+         모달 1: 매일 체중 · 골격근량 · 체지방량(kg) & 체지방률(%) 입력
+         ================================================================= -->
+    <div id="modal-body-record" class="modal-backdrop hidden">
+        <div class="modal-card">
+            <h3>오늘의 체중 · 골격근량 · 체지방량 기록</h3>
+            <p class="modal-sub">체지방량(kg)을 입력하면 체지방률(%)이 자동 계산됩니다.</p>
+            <form id="form-body-record">
+                <div class="form-group">
+                    <label for="input-body-date">측정 날짜</label>
+                    <input type="date" id="input-body-date" class="form-input" required />
+                </div>
+                <div class="form-row-2">
+                    <div class="form-group">
+                        <label for="input-body-weight">몸무게 (kg)</label>
+                        <input type="number" step="0.01" id="input-body-weight" class="form-input" required />
+                    </div>
+                    <div class="form-group">
+                        <label for="input-body-muscle">골격근량 (kg)</label>
+                        <input type="number" step="0.01" id="input-body-muscle" class="form-input" required />
+                    </div>
+                </div>
+                <div class="form-row-2">
+                    <div class="form-group">
+                        <label for="input-body-fat-mass">체지방량 (kg)</label>
+                        <input type="number" step="0.01" id="input-body-fat-mass" class="form-input" required />
+                    </div>
+                    <div class="form-group">
+                        <label for="input-body-fat-pct">체지방률 (%)</label>
+                        <input type="number" step="0.1" id="input-body-fat-pct" class="form-input" required />
+                    </div>
+                </div>
+                <div class="form-group">
+                    <label for="input-body-memo">메모 (공복 측정, 컨디션 등)</label>
+                    <input type="text" id="input-body-memo" class="form-input" placeholder="예: 아침 기상 직후 공복 측정" />
+                </div>
+                <div class="modal-actions">
+                    <button type="button" class="btn-cancel js-close-modal">취소</button>
+                    <button type="submit" class="btn-submit">오늘 기록 저장</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- =================================================================
+         모달 2: 맞춤형 목표 설정 (90.0kg / 골격근 41kg 방어 / 체지방률 19~20%)
+         ================================================================= -->
+    <div id="modal-goal-setting" class="modal-backdrop hidden">
+        <div class="modal-card">
+            <h3>내 다이어트 & 근손실 방어 목표 설정</h3>
+            <p class="modal-sub">설정된 목표를 기준으로 매주 가장 안전한 감량 속도(kg/주)가 자동 재계산됩니다.</p>
+            <form id="form-goal-setting">
+                <div class="form-row-2">
+                    <div class="form-group">
+                        <label for="input-goal-weight">목표 체중 (kg)</label>
+                        <input type="number" step="0.1" id="input-goal-weight" class="form-input" required />
+                    </div>
+                    <div class="form-group">
+                        <label for="input-goal-muscle">최소 방어 골격근량 (kg)</label>
+                        <input type="number" step="0.1" id="input-goal-muscle" class="form-input" required />
+                    </div>
+                </div>
+                <div class="form-row-2">
+                    <div class="form-group">
+                        <label for="input-goal-fat-pct">목표 체지방률 (%)</label>
+                        <input type="number" step="0.1" id="input-goal-fat-pct" class="form-input" required />
+                    </div>
+                    <div class="form-group">
+                        <label for="input-goal-height">신장 (cm)</label>
+                        <input type="number" step="0.1" id="input-goal-height" class="form-input" required />
+                    </div>
+                </div>
+                <div class="form-row-2">
+                    <div class="form-group">
+                        <label for="input-goal-kcal">일일 목표 칼로리 (kcal)</label>
+                        <input type="number" step="10" id="input-goal-kcal" class="form-input" required />
+                    </div>
+                    <div class="form-group">
+                        <label for="input-goal-protein">일일 목표 단백질 (g)</label>
+                        <input type="number" step="1" id="input-goal-protein" class="form-input" required />
+                    </div>
+                </div>
+                <div class="modal-actions">
+                    <button type="button" class="btn-cancel js-close-modal">취소</button>
+                    <button type="submit" class="btn-submit">목표 저장</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- =================================================================
+         모달 3: 대근육 기구 웨이트 세트 로깅
+         ================================================================= -->
+    <div id="modal-workout-set" class="modal-backdrop hidden">
+        <div class="modal-card">
+            <h3>대근육 기구 웨이트 세트 기록</h3>
+            <p class="modal-sub">주 4회 50분 머신 웨이트 트레이닝 세트를 기록하세요.</p>
+            <div id="machine-preset-chips" class="filter-chips-row"></div>
+            <form id="form-workout-set">
+                <div class="form-group">
+                    <label for="input-workout-name">운동 기구명</label>
+                    <input type="text" id="input-workout-name" class="form-input" required />
+                </div>
+                <div class="form-row-3">
+                    <div class="form-group">
+                        <label for="input-workout-set">세트</label>
+                        <input type="number" id="input-workout-set" class="form-input" required />
+                    </div>
+                    <div class="form-group">
+                        <label for="input-workout-weight">중량 (kg)</label>
+                        <input type="number" step="0.5" id="input-workout-weight" class="form-input" value="80" required />
+                    </div>
+                    <div class="form-group">
+                        <label for="input-workout-reps">횟수 (회)</label>
+                        <input type="number" id="input-workout-reps" class="form-input" value="10" required />
+                    </div>
+                </div>
+                <div class="modal-actions">
+                    <button type="button" class="btn-cancel js-close-modal">취소</button>
+                    <button type="submit" class="btn-submit">세트 추가</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- 토스트 알림 -->
+    <div id="toast-banner" class="toast-banner"></div>
+
+    <script type="module" src="js/app.js"></script>
+</body>
+</html>

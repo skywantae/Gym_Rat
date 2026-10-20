@@ -1,0 +1,10 @@
+{
+  "name": "GymRat — 과학적 체성분 감량 & 식단·운동 대시보드",
+  "short_name": "GymRat",
+  "description": "184cm·104.4kg→90.0kg 커팅 및 골격근 41kg 방어를 위한 스포츠 영양학 기반 식단·운동·체성분 웹앱",
+  "start_url": "./index.html",
+  "display": "standalone",
+  "background_color": "#0D1117",
+  "theme_color": "#0D1117",
+  "orientation": "portrait"
+}
