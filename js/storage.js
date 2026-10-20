@@ -10,6 +10,7 @@ const STORAGE_KEYS = {
     PROFILE_BACKUP: "gymrat_user_profile_backup",
     WEIGHT_RECORDS: "gymrat_weight_records_v1",
     WEIGHT_RECORDS_BACKUP: "gymrat_weight_records_backup",
+    WEEK1_RESET_FLAG: "gymrat_week1_reset_v2",
     DIET_RECORDS: "gymrat_diet_records_v1",
     WORKOUT_RECORDS: "gymrat_workout_records_v1",
     DAILY_CHECKLISTS: "gymrat_daily_checklists_v1"
@@ -139,10 +140,10 @@ export class GymRatStorage {
         if (!primaryProfile && !backupProfile) {
             const defaultProfile = {
                 heightCm: 184.0,
-                startWeightKg: 104.60,
+                startWeightKg: 104.40,
                 currentWeightKg: 104.40,
                 targetWeightKg: 90.0,
-                startSkeletalMuscleKg: 42.97,
+                startSkeletalMuscleKg: 42.80,
                 minTargetSkeletalMuscleKg: 41.0,
                 startBodyFatPercent: 28.6,
                 targetBodyFatPercent: 19.5,
@@ -161,55 +162,27 @@ export class GymRatStorage {
             localStorage.setItem(STORAGE_KEYS.PROFILE_BACKUP, JSON.stringify(primaryProfile));
         }
 
+        const todayStr = getLocalDateString();
         const primaryWeights = safeParseArray(localStorage.getItem(STORAGE_KEYS.WEIGHT_RECORDS));
         const backupWeights = safeParseArray(localStorage.getItem(STORAGE_KEYS.WEIGHT_RECORDS_BACKUP));
 
         if ((!primaryWeights || primaryWeights.length === 0) && (!backupWeights || backupWeights.length === 0)) {
             const initialRecords = [
                 {
-                    id: 1,
-                    recordDate: offsetLocalDateStr(-14),
-                    weightKg: 105.40,
-                    skeletalMuscleMassKg: 42.90,
-                    bodyFatMassKg: 30.57,
-                    bodyFatPercentage: 29.0,
-                    memo: "1주차 시작 기준점 측정",
-                    updatedAt: Date.now() - 300000
-                },
-                {
-                    id: 2,
-                    recordDate: offsetLocalDateStr(-7),
-                    weightKg: 104.98,
-                    skeletalMuscleMassKg: 42.95,
-                    bodyFatMassKg: 30.23,
-                    bodyFatPercentage: 28.8,
-                    memo: "2주차 기준점 측정",
-                    updatedAt: Date.now() - 200000
-                },
-                {
-                    id: 3,
-                    recordDate: offsetLocalDateStr(-1),
-                    weightKg: 104.60,
-                    skeletalMuscleMassKg: 42.97,
-                    bodyFatMassKg: 29.92,
-                    bodyFatPercentage: 28.6,
-                    memo: "직전 측정 (104.60kg / 골격근 42.97kg / 체지방 28.6%)",
-                    updatedAt: Date.now() - 100000
-                },
-                {
-                    id: 4,
-                    recordDate: offsetLocalDateStr(0),
+                    id: Date.now(),
+                    recordDate: todayStr,
                     weightKg: 104.40,
                     skeletalMuscleMassKg: 42.80,
                     bodyFatMassKg: 29.86,
                     bodyFatPercentage: 28.6,
-                    memo: "오늘 측정 (104.40kg / 지난번 대비 -0.20kg)",
+                    memo: "1주차 시작일 기준 측정",
                     updatedAt: Date.now()
                 }
             ];
             const serialized = JSON.stringify(initialRecords);
             localStorage.setItem(STORAGE_KEYS.WEIGHT_RECORDS, serialized);
             localStorage.setItem(STORAGE_KEYS.WEIGHT_RECORDS_BACKUP, serialized);
+            localStorage.setItem(STORAGE_KEYS.WEEK1_RESET_FLAG, "done");
         } else {
             // 기존 기록과 백업 기록을 날짜 기준으로 무손실 병합
             const mergedMap = new Map();
@@ -224,9 +197,67 @@ export class GymRatStorage {
                     }
                 }
             });
-            const mergedList = Array.from(mergedMap.values()).sort((a, b) =>
+
+            let mergedList = Array.from(mergedMap.values()).sort((a, b) =>
                 a.recordDate.localeCompare(b.recordDate)
             );
+
+            // 과거 자동 생성되었던 가상 샘플 데이터(-14일, -7일, -1일)를 1회 정리하여 오늘 입력한 수치가 1주차 시작일이 되도록 보정
+            if (localStorage.getItem(STORAGE_KEYS.WEEK1_RESET_FLAG) !== "done") {
+                const legacySampleMemos = new Set([
+                    "다이어트 시작 2주 전 측정",
+                    "지난주 월요일 기준점 측정",
+                    "1주차 시작 기준점 측정",
+                    "2주차 기준점 측정",
+                    "직전 측정 (104.60kg / 골격근 42.97kg / 체지방 28.6%)"
+                ]);
+
+                mergedList = mergedList.filter(r => {
+                    if (r.id === 1 || r.id === 2 || r.id === 3) return false;
+                    if (legacySampleMemos.has(r.memo)) return false;
+                    if (r.recordDate < todayStr) return false;
+                    return true;
+                });
+
+                mergedList = mergedList.map(r => {
+                    if (r.memo === "오늘 측정 (104.40kg / 지난번 대비 -0.20kg)" || !r.memo) {
+                        return { ...r, memo: "1주차 시작일 기준 측정" };
+                    }
+                    return r;
+                });
+
+                if (mergedList.length === 0) {
+                    mergedList = [
+                        {
+                            id: Date.now(),
+                            recordDate: todayStr,
+                            weightKg: 104.40,
+                            skeletalMuscleMassKg: 42.80,
+                            bodyFatMassKg: 29.86,
+                            bodyFatPercentage: 28.6,
+                            memo: "1주차 시작일 기준 측정",
+                            updatedAt: Date.now()
+                        }
+                    ];
+                }
+
+                const currentProfile = safeParseObject(localStorage.getItem(STORAGE_KEYS.PROFILE)) ||
+                    safeParseObject(localStorage.getItem(STORAGE_KEYS.PROFILE_BACKUP));
+                if (currentProfile && mergedList.length > 0) {
+                    const startRec = mergedList[0];
+                    const latestRec = mergedList[mergedList.length - 1];
+                    currentProfile.startWeightKg = Number(startRec.weightKg);
+                    currentProfile.startSkeletalMuscleKg = Number(startRec.skeletalMuscleMassKg);
+                    currentProfile.startBodyFatPercent = Number(startRec.bodyFatPercentage);
+                    currentProfile.currentWeightKg = Number(latestRec.weightKg);
+                    const profStr = JSON.stringify(currentProfile);
+                    localStorage.setItem(STORAGE_KEYS.PROFILE, profStr);
+                    localStorage.setItem(STORAGE_KEYS.PROFILE_BACKUP, profStr);
+                }
+
+                localStorage.setItem(STORAGE_KEYS.WEEK1_RESET_FLAG, "done");
+            }
+
             const serialized = JSON.stringify(mergedList);
             localStorage.setItem(STORAGE_KEYS.WEIGHT_RECORDS, serialized);
             localStorage.setItem(STORAGE_KEYS.WEIGHT_RECORDS_BACKUP, serialized);

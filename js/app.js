@@ -296,9 +296,11 @@ class GymRatApp {
 
         // 1. 앳플리 스타일 상단 몸무게 & 이번 주 감량 목표 박스 업데이트
         document.getElementById("latest-record-date").textContent =
-            `최근 기록일: ${plan.latestDate} (총 ${weightRecords.length}회 기록 보존 중)`;
+            `최근 기록일: ${plan.latestDate} (1주차 시작일: ${plan.startDateStr})`;
         document.getElementById("current-week-pill").textContent =
-            `${plan.currentWeekNumber}주차 진행 중`;
+            plan.latestDate === plan.startDateStr
+                ? "1주차 (시작일)"
+                : `${plan.currentWeekNumber}주차 진행 중`;
         document.getElementById("atflee-current-weight").textContent = plan.currentWeightKg.toFixed(2);
         document.getElementById("atflee-weekly-remaining").textContent = `- ${plan.remainingToLoseThisWeekKg.toFixed(2)}`;
         document.getElementById("atflee-weekly-sub1").textContent =
@@ -639,11 +641,12 @@ class GymRatApp {
                     : SafeWeightLossCalculator.round2(rec.weightKg * (rec.bodyFatPercentage / 100));
                 const muscleOk = Number(rec.skeletalMuscleMassKg) >= Number(profile.minTargetSkeletalMuscleKg);
                 const weekNum = SafeWeightLossCalculator.calculateWeekNumber(plan.startDateStr, rec.recordDate);
+                const weekLabel = rec.recordDate === plan.startDateStr ? "1주차 시작일" : `${weekNum}주차`;
                 return `
                 <div class="history-card">
                     <div class="history-info">
                         <div class="history-date-row">
-                            <strong>[${weekNum}주차] ${rec.recordDate}</strong>
+                            <strong>[${weekLabel}] ${rec.recordDate}</strong>
                             <span class="defense-pill ${muscleOk ? "ok" : "warn"}">
                                 ${muscleOk ? "골격근 방어" : "근손실 주의"}
                             </span>
@@ -690,9 +693,11 @@ class GymRatApp {
         const plan = SafeWeightLossCalculator.calculate(profile, records);
 
         document.getElementById("roadmap-modal-title").textContent =
-            `현재 ${plan.currentWeekNumber}주차 감량 현황 및 로드맵`;
+            plan.latestDate === plan.startDateStr
+                ? `현재 1주차 (시작일) 감량 현황 및 로드맵`
+                : `현재 ${plan.currentWeekNumber}주차 감량 현황 및 로드맵`;
         document.getElementById("roadmap-modal-subtitle").textContent =
-            `시작일(${plan.startDateStr}) 기준 총 ${records.length}회 측정 기록과 이후 목표(${plan.targetWeightKg.toFixed(1)}kg) 도달 예상 몸무게입니다.`;
+            `1주차 시작일(${plan.startDateStr}) 기준 측정 기록(${records.length}회)과 이후 목표(${plan.targetWeightKg.toFixed(1)}kg) 도달 예상 몸무게입니다.`;
 
         const bannerEl = document.getElementById("roadmap-current-week-banner");
         bannerEl.innerHTML = `
@@ -702,7 +707,7 @@ class GymRatApp {
             </div>
             <div class="roadmap-summary-grid">
                 <div>
-                    <span>이번 주 시작</span>
+                    <span>${plan.currentWeekNumber}주차 시작</span>
                     <strong>${plan.thisWeekStartWeightKg.toFixed(2)}kg</strong>
                 </div>
                 <div>
@@ -710,7 +715,7 @@ class GymRatApp {
                     <strong class="text-blue">${plan.currentWeightKg.toFixed(2)}kg</strong>
                 </div>
                 <div>
-                    <span>이번 주 목표</span>
+                    <span>${plan.currentWeekNumber}주차 목표</span>
                     <strong class="text-lime">${plan.thisWeekTargetWeightKg.toFixed(2)}kg</strong>
                 </div>
             </div>
@@ -739,15 +744,19 @@ class GymRatApp {
             .map((rec, idx) => {
                 const deltaSign = rec.deltaWeightKg > 0 ? `+${rec.deltaWeightKg.toFixed(2)}` : rec.deltaWeightKg.toFixed(2);
                 const isLatest = idx === 0;
+                const weekTitle = rec.isStartRecord
+                    ? "1주차 (시작일)"
+                    : `${rec.weekNumber}주차 ${isLatest ? "(현재)" : ""}`;
+                const deltaLabel = rec.isStartRecord ? "시작 기준점" : `${deltaSign} kg`;
                 return `
                 <div class="roadmap-row ${isLatest ? "current-week-highlight" : ""}">
                     <div>
-                        <strong>${rec.weekNumber}주차 ${isLatest ? "(현재)" : ""}</strong>
+                        <strong>${weekTitle}</strong>
                         <span class="roadmap-sub">${rec.recordDate}</span>
                     </div>
                     <div>
                         <strong>${rec.weightKg.toFixed(2)} kg</strong>
-                        <span class="roadmap-sub">${deltaSign} kg</span>
+                        <span class="roadmap-sub">${deltaLabel}</span>
                     </div>
                     <div>
                         <strong>골격근 ${rec.skeletalMuscleMassKg.toFixed(2)}kg</strong>

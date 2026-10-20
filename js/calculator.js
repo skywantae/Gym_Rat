@@ -45,14 +45,29 @@ export class SafeWeightLossCalculator {
     }
 
     /**
-     * 시작일과 기준일 사이의 주차(1주차부터 시작)를 계산합니다.
+     * 시작일(1주차 시작일)로부터 경과 일수를 계산하여 주차(1주차부터 시작, 7일 단위)를 반환합니다.
      */
     static calculateWeekNumber(startDateStr, targetDateStr) {
-        const startMonday = parseLocalDate(this.getMondayDateString(startDateStr));
-        const targetMonday = parseLocalDate(this.getMondayDateString(targetDateStr));
-        const diffMs = targetMonday.getTime() - startMonday.getTime();
-        const diffWeeks = Math.floor(diffMs / (7 * 24 * 60 * 60 * 1000));
-        return Math.max(1, diffWeeks + 1);
+        const startDate = parseLocalDate(startDateStr);
+        const targetDate = parseLocalDate(targetDateStr);
+        const diffMs = targetDate.getTime() - startDate.getTime();
+        const diffDays = Math.floor(diffMs / (24 * 60 * 60 * 1000));
+        return Math.max(1, Math.floor(diffDays / 7) + 1);
+    }
+
+    /**
+     * 시작일(1주차 시작일)과 주차 번호(1, 2, 3...)를 받아 해당 주차의 시작일과 종료일(7일 구간)을 반환합니다.
+     */
+    static getWeekDateRange(startDateStr, weekNumber) {
+        const startDate = parseLocalDate(startDateStr);
+        const weekStart = new Date(startDate);
+        weekStart.setDate(weekStart.getDate() + (weekNumber - 1) * 7);
+        const weekEnd = new Date(weekStart);
+        weekEnd.setDate(weekStart.getDate() + 6);
+        return {
+            weekStartStr: getLocalDateString(weekStart),
+            weekEndStr: getLocalDateString(weekEnd)
+        };
     }
 
     /**
@@ -148,15 +163,15 @@ export class SafeWeightLossCalculator {
             muscleDeltaFromPrevKg
         );
 
-        // 이번 주(월요일~일요일) 시작 체중 및 이번 주 남은 감량치 계산
-        const mondayStr = this.getMondayDateString(latestDate);
-        const recordsBeforeThisWeek = sorted.filter(r => r.recordDate < mondayStr);
-        const recordsInThisWeek = sorted.filter(r => r.recordDate >= mondayStr);
+        // 현재 주차(시작일 기준 7일 단위)의 시작 체중 및 이번 주 남은 감량치 계산
+        const currentWeekRange = this.getWeekDateRange(startDateStr, currentWeekNumber);
+        const recordsBeforeThisWeek = sorted.filter(r => r.recordDate < currentWeekRange.weekStartStr);
+        const recordsInThisWeek = sorted.filter(r => r.recordDate >= currentWeekRange.weekStartStr);
 
         let thisWeekStartWeightKg = currentWeightKg;
         if (recordsBeforeThisWeek.length > 0) {
             thisWeekStartWeightKg = Number(recordsBeforeThisWeek[recordsBeforeThisWeek.length - 1].weightKg);
-        } else if (recordsInThisWeek.length >= 2) {
+        } else if (recordsInThisWeek.length > 0) {
             thisWeekStartWeightKg = Number(recordsInThisWeek[0].weightKg);
         }
 
@@ -172,7 +187,7 @@ export class SafeWeightLossCalculator {
             ? Math.min(1, Math.max(0, alreadyLostThisWeekKg / weeklyTargetLossKg))
             : 1;
 
-        // 이전 기록 리스트 (주차 및 직전 대비 변화량 포함)
+        // 이전 기록 리스트 (주차, 1주차 시작일 여부, 직전 대비 변화량 포함)
         const pastRecordsWithMeta = sorted.map((rec, idx) => {
             const prevRec = idx > 0 ? sorted[idx - 1] : null;
             const w = Number(rec.weightKg);
@@ -188,34 +203,31 @@ export class SafeWeightLossCalculator {
                 bodyFatMassKg: fm,
                 bodyFatPercentage: fp,
                 deltaWeightKg: deltaW,
-                weekNumber: weekNum
+                weekNumber: weekNum,
+                isStartRecord: idx === 0
             };
         }).reverse();
 
-        // 이후 주차별 예상 몸무게 시뮬레이션 로드맵 생성
+        // 이후 주차별 예상 몸무게 시뮬레이션 로드맵 생성 (1주차 시작일 기준 7일 단위)
         const futureWeeklyRoadmap = [];
         let simWeight = currentWeightKg;
         let simFatMass = currentFatMassKg;
-        const baseMondayDate = parseLocalDate(mondayStr);
         let weekOffset = 1;
 
-        // 먼저 이번 주(현재 주차) 목표 행 추가
-        const thisWeekSunday = new Date(baseMondayDate);
-        thisWeekSunday.setDate(thisWeekSunday.getDate() + 6);
+        // 먼저 현재 진행 중인 주차(예: 1주차)의 종료 목표 행 추가
+        const thisWeekEndWeight = this.round2(Math.max(targetWeightKg, currentWeightKg - remainingToLoseThisWeekKg));
+        const thisWeekEndFatMass = this.round2(Math.max(5, simFatMass - remainingToLoseThisWeekKg * 0.9));
         futureWeeklyRoadmap.push({
             weekNumber: currentWeekNumber,
             isCurrentWeek: true,
-            dateRangeText: `${mondayStr.slice(5)} ~ ${getLocalDateString(thisWeekSunday).slice(5)}`,
+            dateRangeText: `${currentWeekRange.weekStartStr.slice(5)} ~ ${currentWeekRange.weekEndStr.slice(5)}`,
             weeklyLossKg: remainingToLoseThisWeekKg,
-            expectedWeightKg: this.round2(Math.max(targetWeightKg, currentWeightKg - remainingToLoseThisWeekKg)),
-            expectedFatPercent: this.round1(
-                ((Math.max(5, simFatMass - remainingToLoseThisWeekKg)) /
-                    Math.max(targetWeightKg, currentWeightKg - remainingToLoseThisWeekKg)) * 100
-            )
+            expectedWeightKg: thisWeekEndWeight,
+            expectedFatPercent: this.round1((thisWeekEndFatMass / thisWeekEndWeight) * 100)
         });
 
-        simWeight = this.round2(Math.max(targetWeightKg, currentWeightKg - remainingToLoseThisWeekKg));
-        simFatMass = this.round2(Math.max(5, simFatMass - remainingToLoseThisWeekKg * 0.9));
+        simWeight = thisWeekEndWeight;
+        simFatMass = thisWeekEndFatMass;
 
         while (simWeight > targetWeightKg + 0.05 && weekOffset <= 52) {
             const simFatPct = this.round1((simFatMass / simWeight) * 100);
@@ -235,15 +247,13 @@ export class SafeWeightLossCalculator {
             simFatMass = this.round2(Math.max(5, simFatMass - stepLoss * 0.9));
             const nextFatPct = this.round1((simFatMass / simWeight) * 100);
 
-            const wkMon = new Date(baseMondayDate);
-            wkMon.setDate(wkMon.getDate() + weekOffset * 7);
-            const wkSun = new Date(wkMon);
-            wkSun.setDate(wkSun.getDate() + 6);
+            const nextWeekNum = currentWeekNumber + weekOffset;
+            const nextRange = this.getWeekDateRange(startDateStr, nextWeekNum);
 
             futureWeeklyRoadmap.push({
-                weekNumber: currentWeekNumber + weekOffset,
+                weekNumber: nextWeekNum,
                 isCurrentWeek: false,
-                dateRangeText: `${getLocalDateString(wkMon).slice(5)} ~ ${getLocalDateString(wkSun).slice(5)}`,
+                dateRangeText: `${nextRange.weekStartStr.slice(5)} ~ ${nextRange.weekEndStr.slice(5)}`,
                 weeklyLossKg: stepLoss,
                 expectedWeightKg: simWeight,
                 expectedFatPercent: nextFatPct
@@ -253,10 +263,12 @@ export class SafeWeightLossCalculator {
         }
 
         const totalRemainingWeightKg = this.round2(Math.max(0, currentWeightKg - targetWeightKg));
-        const estimatedWeeksToFinalGoal = Math.max(0, futureWeeklyRoadmap.length - 1);
-        const targetDateObj = new Date(baseMondayDate);
-        targetDateObj.setDate(targetDateObj.getDate() + estimatedWeeksToFinalGoal * 7 + 6);
-        const estimatedTargetDate = getLocalDateString(targetDateObj);
+        const estimatedWeeksToFinalGoal = Math.max(1, futureWeeklyRoadmap.length);
+        const lastWeekRange = this.getWeekDateRange(
+            startDateStr,
+            currentWeekNumber + Math.max(0, futureWeeklyRoadmap.length - 1)
+        );
+        const estimatedTargetDate = lastWeekRange.weekEndStr;
 
         const recommendedDailyDeficitKcal = Math.round((weeklyTargetLossKg * 7700) / 7);
         const targetFatPercent = Number(profile.targetBodyFatPercent);
