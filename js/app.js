@@ -295,10 +295,13 @@ class GymRatApp {
         const weeklyWorkoutDays = GymRatStorage.getWeeklyWorkoutDaysCount(this.todayStr);
 
         // 1. 앳플리 스타일 상단 몸무게 & 이번 주 감량 목표 박스 업데이트
-        document.getElementById("latest-record-date").textContent =
-            `최근 기록일: ${plan.latestDate} (1주차 시작일: ${plan.startDateStr})`;
-        document.getElementById("current-week-pill").textContent =
-            plan.latestDate === plan.startDateStr
+        const hasRecords = weightRecords.length > 0;
+        document.getElementById("latest-record-date").textContent = hasRecords
+            ? `최근 기록일: ${plan.latestDate} (1주차 시작일: ${plan.startDateStr} · 총 ${weightRecords.length}회 기록)`
+            : "등록된 체성분 기록이 없습니다. [오늘 체성분 입력]으로 1주차 시작일을 기록하세요.";
+        document.getElementById("current-week-pill").textContent = !hasRecords
+            ? "1주차 시작 대기"
+            : plan.latestDate === plan.startDateStr
                 ? "1주차 (시작일)"
                 : `${plan.currentWeekNumber}주차 진행 중`;
         document.getElementById("atflee-current-weight").textContent = plan.currentWeightKg.toFixed(2);
@@ -616,6 +619,12 @@ class GymRatApp {
             document.getElementById("chart-tooltip-weight").textContent = `${Number(selRecord.weightKg).toFixed(2)}kg`;
             document.getElementById("chart-tooltip-muscle").textContent = `${Number(selRecord.skeletalMuscleMassKg).toFixed(2)}kg`;
             document.getElementById("chart-tooltip-fat").textContent = `${fatMass.toFixed(2)}kg (${Number(selRecord.bodyFatPercentage).toFixed(1)}%)`;
+        } else {
+            document.getElementById("chart-tooltip-date").textContent = "측정 기록 없음";
+            document.getElementById("chart-tooltip-memo").textContent = "상단 [오늘 체성분 입력] 버튼으로 1주차 시작 기록을 등록하세요.";
+            document.getElementById("chart-tooltip-weight").textContent = "-";
+            document.getElementById("chart-tooltip-muscle").textContent = "-";
+            document.getElementById("chart-tooltip-fat").textContent = "-";
         }
 
         if (!document.getElementById("screen-graph").classList.contains("hidden")) {
@@ -634,15 +643,18 @@ class GymRatApp {
 
         const historyEl = document.getElementById("weight-history-list");
         const reversed = [...filtered].reverse();
-        historyEl.innerHTML = reversed
-            .map(rec => {
-                const fatMass = rec.bodyFatMassKg != null
-                    ? Number(rec.bodyFatMassKg)
-                    : SafeWeightLossCalculator.round2(rec.weightKg * (rec.bodyFatPercentage / 100));
-                const muscleOk = Number(rec.skeletalMuscleMassKg) >= Number(profile.minTargetSkeletalMuscleKg);
-                const weekNum = SafeWeightLossCalculator.calculateWeekNumber(plan.startDateStr, rec.recordDate);
-                const weekLabel = rec.recordDate === plan.startDateStr ? "1주차 시작일" : `${weekNum}주차`;
-                return `
+        if (reversed.length === 0) {
+            historyEl.innerHTML = `<p class="empty-hint">저장된 체성분 측정 기록이 없습니다. 상단 [오늘 체성분 입력] 버튼을 눌러 1주차 시작일 기록을 등록하세요.</p>`;
+        } else {
+            historyEl.innerHTML = reversed
+                .map(rec => {
+                    const fatMass = rec.bodyFatMassKg != null
+                        ? Number(rec.bodyFatMassKg)
+                        : SafeWeightLossCalculator.round2(rec.weightKg * (rec.bodyFatPercentage / 100));
+                    const muscleOk = Number(rec.skeletalMuscleMassKg) >= Number(profile.minTargetSkeletalMuscleKg);
+                    const weekNum = SafeWeightLossCalculator.calculateWeekNumber(plan.startDateStr, rec.recordDate);
+                    const weekLabel = rec.recordDate === plan.startDateStr ? "1주차 시작일" : `${weekNum}주차`;
+                    return `
                 <div class="history-card">
                     <div class="history-info">
                         <div class="history-date-row">
@@ -661,22 +673,19 @@ class GymRatApp {
                     <button type="button" class="btn-text-delete" data-delete-weight="${rec.id}">삭제</button>
                 </div>
             `;
-            })
-            .join("");
+                })
+                .join("");
 
-        historyEl.querySelectorAll("[data-delete-weight]").forEach(btn => {
-            btn.addEventListener("click", () => {
-                const id = Number(btn.getAttribute("data-delete-weight"));
-                const deleted = GymRatStorage.deleteWeightRecord(id);
-                if (!deleted) {
-                    this.showToast("최소 1개의 기준 기록은 삭제할 수 없습니다.");
-                    return;
-                }
-                this.selectedChartPointIndex = null;
-                this.renderAll();
-                this.showToast("선택한 날짜의 체성분 기록이 삭제되었습니다.");
+            historyEl.querySelectorAll("[data-delete-weight]").forEach(btn => {
+                btn.addEventListener("click", () => {
+                    const id = Number(btn.getAttribute("data-delete-weight"));
+                    GymRatStorage.deleteWeightRecord(id);
+                    this.selectedChartPointIndex = null;
+                    this.renderAll();
+                    this.showToast("선택한 날짜의 체성분 기록이 삭제되었습니다.");
+                });
             });
-        });
+        }
     }
 
     /**
@@ -693,11 +702,15 @@ class GymRatApp {
         const plan = SafeWeightLossCalculator.calculate(profile, records);
 
         document.getElementById("roadmap-modal-title").textContent =
-            plan.latestDate === plan.startDateStr
-                ? `현재 1주차 (시작일) 감량 현황 및 로드맵`
-                : `현재 ${plan.currentWeekNumber}주차 감량 현황 및 로드맵`;
+            records.length === 0
+                ? "1주차 감량 로드맵 (기록 대기 중)"
+                : plan.latestDate === plan.startDateStr
+                    ? "현재 1주차 (시작일) 감량 현황 및 로드맵"
+                    : `현재 ${plan.currentWeekNumber}주차 감량 현황 및 로드맵`;
         document.getElementById("roadmap-modal-subtitle").textContent =
-            `1주차 시작일(${plan.startDateStr}) 기준 측정 기록(${records.length}회)과 이후 목표(${plan.targetWeightKg.toFixed(1)}kg) 도달 예상 몸무게입니다.`;
+            records.length === 0
+                ? `첫 체성분 기록을 등록하면 해당 날짜가 1주차 시작일로 지정되며, 목표(${plan.targetWeightKg.toFixed(1)}kg)까지 주차별 로드맵이 생성됩니다.`
+                : `1주차 시작일(${plan.startDateStr}) 기준 측정 기록(${records.length}회)과 이후 목표(${plan.targetWeightKg.toFixed(1)}kg) 도달 예상 몸무게입니다.`;
 
         const bannerEl = document.getElementById("roadmap-current-week-banner");
         bannerEl.innerHTML = `
@@ -740,15 +753,18 @@ class GymRatApp {
 
         // 1) 이전 측정 기록 렌더링
         const pastRowsEl = document.getElementById("roadmap-past-rows");
-        pastRowsEl.innerHTML = plan.pastRecordsWithMeta
-            .map((rec, idx) => {
-                const deltaSign = rec.deltaWeightKg > 0 ? `+${rec.deltaWeightKg.toFixed(2)}` : rec.deltaWeightKg.toFixed(2);
-                const isLatest = idx === 0;
-                const weekTitle = rec.isStartRecord
-                    ? "1주차 (시작일)"
-                    : `${rec.weekNumber}주차 ${isLatest ? "(현재)" : ""}`;
-                const deltaLabel = rec.isStartRecord ? "시작 기준점" : `${deltaSign} kg`;
-                return `
+        if (plan.pastRecordsWithMeta.length === 0) {
+            pastRowsEl.innerHTML = `<p class="empty-hint" style="padding: 18px 8px; text-align: center;">저장된 측정 기록이 없습니다. 상단 [오늘 체성분 입력] 버튼을 눌러 1주차 시작일을 기록하세요.</p>`;
+        } else {
+            pastRowsEl.innerHTML = plan.pastRecordsWithMeta
+                .map((rec, idx) => {
+                    const deltaSign = rec.deltaWeightKg > 0 ? `+${rec.deltaWeightKg.toFixed(2)}` : rec.deltaWeightKg.toFixed(2);
+                    const isLatest = idx === 0;
+                    const weekTitle = rec.isStartRecord
+                        ? "1주차 (시작일)"
+                        : `${rec.weekNumber}주차 ${isLatest ? "(현재)" : ""}`;
+                    const deltaLabel = rec.isStartRecord ? "시작 기준점" : `${deltaSign} kg`;
+                    return `
                 <div class="roadmap-row ${isLatest ? "current-week-highlight" : ""}">
                     <div>
                         <strong>${weekTitle}</strong>
@@ -764,8 +780,9 @@ class GymRatApp {
                     </div>
                 </div>
             `;
-            })
-            .join("");
+                })
+                .join("");
+        }
 
         // 2) 이후 주차별 예상 몸무게 시뮬레이션 렌더링
         const futureRowsEl = document.getElementById("roadmap-future-rows");

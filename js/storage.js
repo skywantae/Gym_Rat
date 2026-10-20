@@ -10,7 +10,6 @@ const STORAGE_KEYS = {
     PROFILE_BACKUP: "gymrat_user_profile_backup",
     WEIGHT_RECORDS: "gymrat_weight_records_v1",
     WEIGHT_RECORDS_BACKUP: "gymrat_weight_records_backup",
-    WEEK1_RESET_FLAG: "gymrat_week1_reset_v2",
     DIET_RECORDS: "gymrat_diet_records_v1",
     WORKOUT_RECORDS: "gymrat_workout_records_v1",
     DAILY_CHECKLISTS: "gymrat_daily_checklists_v1"
@@ -102,10 +101,54 @@ export const MachinePresets = [
     { name: "숄더 프레스 머신", muscle: "어깨" }
 ];
 
-function offsetLocalDateStr(daysOffset) {
-    const d = new Date();
-    d.setDate(d.getDate() + daysOffset);
-    return getLocalDateString(d);
+const LEGACY_SAMPLE_MEMOS = new Set([
+    "다이어트 시작 2주 전 측정",
+    "지난주 월요일 기준점 측정",
+    "1주차 시작 기준점 측정",
+    "2주차 기준점 측정",
+    "직전 측정 (104.60kg / 골격근 42.97kg / 체지방 28.6%)",
+    "오늘 측정 (104.40kg / 지난번 대비 -0.20kg)",
+    "1주차 시작일 기준 측정"
+]);
+
+function isUntouchedSampleRecord(r) {
+    if (!r || typeof r !== "object") return true;
+    if (r.userCreated === true) return false;
+
+    // 과거 초기 화면/검증용으로 자동 생성되었던 고정 샘플 ID (1, 2, 3) 제거
+    if (r.id === 1 || r.id === 2 || r.id === 3) return true;
+
+    // 과거 샘플 수치 (105.40, 104.98, 104.60) + 샘플 메모 조합 제거
+    const w = Number(r.weightKg);
+    const m = Number(r.skeletalMuscleMassKg);
+    const fm = Number(r.bodyFatMassKg);
+    const fp = Number(r.bodyFatPercentage);
+
+    if (
+        (w === 105.4 && m === 42.9) ||
+        (w === 104.98 && m === 42.95) ||
+        (w === 104.6 && m === 42.97)
+    ) {
+        return true;
+    }
+
+    // 오늘 날짜로 자동 시드되었던 기본 샘플(104.40 / 42.80 / 29.86 / 28.6)이면서 사용자가 직접 저장하지 않은 경우 제거
+    const isDefaultTodaySampleValues =
+        w === 104.4 && m === 42.8 && fm === 29.86 && fp === 28.6;
+    if (isDefaultTodaySampleValues && LEGACY_SAMPLE_MEMOS.has(r.memo || "")) {
+        return true;
+    }
+
+    return false;
+}
+
+function sanitizeUserRecord(r) {
+    const cleanedMemo = LEGACY_SAMPLE_MEMOS.has(r.memo || "") ? "" : (r.memo || "");
+    return {
+        ...r,
+        memo: cleanedMemo,
+        userCreated: true
+    };
 }
 
 function safeParseArray(raw) {
@@ -130,8 +173,8 @@ function safeParseObject(raw) {
 
 export class GymRatStorage {
     /**
-     * 최초 실행 시에만 기본 프로필과 초기 샘플 기록을 세팅하며,
-     * 이미 저장된 기록이나 백업 기록이 하나라도 존재하면 기존 데이터를 100% 보존합니다.
+     * 초기 화면이나 기능 검증을 위한 자동 생성 샘플 데이터는 일절 생성하지 않으며,
+     * 기존에 남아 있던 자동 생성 샘플 데이터는 모두 제거하고 사용자가 직접 입력한 기록만 영구 보존합니다.
      */
     static ensureSeeded() {
         const primaryProfile = safeParseObject(localStorage.getItem(STORAGE_KEYS.PROFILE));
@@ -162,105 +205,48 @@ export class GymRatStorage {
             localStorage.setItem(STORAGE_KEYS.PROFILE_BACKUP, JSON.stringify(primaryProfile));
         }
 
-        const todayStr = getLocalDateString();
-        const primaryWeights = safeParseArray(localStorage.getItem(STORAGE_KEYS.WEIGHT_RECORDS));
-        const backupWeights = safeParseArray(localStorage.getItem(STORAGE_KEYS.WEIGHT_RECORDS_BACKUP));
+        const primaryWeights = safeParseArray(localStorage.getItem(STORAGE_KEYS.WEIGHT_RECORDS)) || [];
+        const backupWeights = safeParseArray(localStorage.getItem(STORAGE_KEYS.WEIGHT_RECORDS_BACKUP)) || [];
 
-        if ((!primaryWeights || primaryWeights.length === 0) && (!backupWeights || backupWeights.length === 0)) {
-            const initialRecords = [
-                {
-                    id: Date.now(),
-                    recordDate: todayStr,
-                    weightKg: 104.40,
-                    skeletalMuscleMassKg: 42.80,
-                    bodyFatMassKg: 29.86,
-                    bodyFatPercentage: 28.6,
-                    memo: "1주차 시작일 기준 측정",
-                    updatedAt: Date.now()
-                }
-            ];
-            const serialized = JSON.stringify(initialRecords);
-            localStorage.setItem(STORAGE_KEYS.WEIGHT_RECORDS, serialized);
-            localStorage.setItem(STORAGE_KEYS.WEIGHT_RECORDS_BACKUP, serialized);
-            localStorage.setItem(STORAGE_KEYS.WEEK1_RESET_FLAG, "done");
-        } else {
-            // 기존 기록과 백업 기록을 날짜 기준으로 무손실 병합
-            const mergedMap = new Map();
-            (backupWeights || []).forEach(r => {
-                if (r && r.recordDate) mergedMap.set(r.recordDate, r);
-            });
-            (primaryWeights || []).forEach(r => {
-                if (r && r.recordDate) {
-                    const existing = mergedMap.get(r.recordDate);
-                    if (!existing || (r.updatedAt || 0) >= (existing.updatedAt || 0)) {
-                        mergedMap.set(r.recordDate, r);
-                    }
-                }
-            });
-
-            let mergedList = Array.from(mergedMap.values()).sort((a, b) =>
-                a.recordDate.localeCompare(b.recordDate)
-            );
-
-            // 과거 자동 생성되었던 가상 샘플 데이터(-14일, -7일, -1일)를 1회 정리하여 오늘 입력한 수치가 1주차 시작일이 되도록 보정
-            if (localStorage.getItem(STORAGE_KEYS.WEEK1_RESET_FLAG) !== "done") {
-                const legacySampleMemos = new Set([
-                    "다이어트 시작 2주 전 측정",
-                    "지난주 월요일 기준점 측정",
-                    "1주차 시작 기준점 측정",
-                    "2주차 기준점 측정",
-                    "직전 측정 (104.60kg / 골격근 42.97kg / 체지방 28.6%)"
-                ]);
-
-                mergedList = mergedList.filter(r => {
-                    if (r.id === 1 || r.id === 2 || r.id === 3) return false;
-                    if (legacySampleMemos.has(r.memo)) return false;
-                    if (r.recordDate < todayStr) return false;
-                    return true;
-                });
-
-                mergedList = mergedList.map(r => {
-                    if (r.memo === "오늘 측정 (104.40kg / 지난번 대비 -0.20kg)" || !r.memo) {
-                        return { ...r, memo: "1주차 시작일 기준 측정" };
-                    }
-                    return r;
-                });
-
-                if (mergedList.length === 0) {
-                    mergedList = [
-                        {
-                            id: Date.now(),
-                            recordDate: todayStr,
-                            weightKg: 104.40,
-                            skeletalMuscleMassKg: 42.80,
-                            bodyFatMassKg: 29.86,
-                            bodyFatPercentage: 28.6,
-                            memo: "1주차 시작일 기준 측정",
-                            updatedAt: Date.now()
-                        }
-                    ];
-                }
-
-                const currentProfile = safeParseObject(localStorage.getItem(STORAGE_KEYS.PROFILE)) ||
-                    safeParseObject(localStorage.getItem(STORAGE_KEYS.PROFILE_BACKUP));
-                if (currentProfile && mergedList.length > 0) {
-                    const startRec = mergedList[0];
-                    const latestRec = mergedList[mergedList.length - 1];
-                    currentProfile.startWeightKg = Number(startRec.weightKg);
-                    currentProfile.startSkeletalMuscleKg = Number(startRec.skeletalMuscleMassKg);
-                    currentProfile.startBodyFatPercent = Number(startRec.bodyFatPercentage);
-                    currentProfile.currentWeightKg = Number(latestRec.weightKg);
-                    const profStr = JSON.stringify(currentProfile);
-                    localStorage.setItem(STORAGE_KEYS.PROFILE, profStr);
-                    localStorage.setItem(STORAGE_KEYS.PROFILE_BACKUP, profStr);
-                }
-
-                localStorage.setItem(STORAGE_KEYS.WEEK1_RESET_FLAG, "done");
+        // 사용자 기록 무손실 병합 후, 자동 생성된 샘플 데이터는 전량 제거
+        const mergedMap = new Map();
+        backupWeights.forEach(r => {
+            if (r && r.recordDate && !isUntouchedSampleRecord(r)) {
+                mergedMap.set(r.recordDate, sanitizeUserRecord(r));
             }
+        });
+        primaryWeights.forEach(r => {
+            if (r && r.recordDate && !isUntouchedSampleRecord(r)) {
+                const cleaned = sanitizeUserRecord(r);
+                const existing = mergedMap.get(r.recordDate);
+                if (!existing || (cleaned.updatedAt || 0) >= (existing.updatedAt || 0)) {
+                    mergedMap.set(r.recordDate, cleaned);
+                }
+            }
+        });
 
-            const serialized = JSON.stringify(mergedList);
-            localStorage.setItem(STORAGE_KEYS.WEIGHT_RECORDS, serialized);
-            localStorage.setItem(STORAGE_KEYS.WEIGHT_RECORDS_BACKUP, serialized);
+        const mergedList = Array.from(mergedMap.values()).sort((a, b) =>
+            a.recordDate.localeCompare(b.recordDate)
+        );
+
+        const serialized = JSON.stringify(mergedList);
+        localStorage.setItem(STORAGE_KEYS.WEIGHT_RECORDS, serialized);
+        localStorage.setItem(STORAGE_KEYS.WEIGHT_RECORDS_BACKUP, serialized);
+
+        if (mergedList.length > 0) {
+            const currentProfile = safeParseObject(localStorage.getItem(STORAGE_KEYS.PROFILE)) ||
+                safeParseObject(localStorage.getItem(STORAGE_KEYS.PROFILE_BACKUP));
+            if (currentProfile) {
+                const startRec = mergedList[0];
+                const latestRec = mergedList[mergedList.length - 1];
+                currentProfile.startWeightKg = Number(startRec.weightKg);
+                currentProfile.startSkeletalMuscleKg = Number(startRec.skeletalMuscleMassKg);
+                currentProfile.startBodyFatPercent = Number(startRec.bodyFatPercentage);
+                currentProfile.currentWeightKg = Number(latestRec.weightKg);
+                const profStr = JSON.stringify(currentProfile);
+                localStorage.setItem(STORAGE_KEYS.PROFILE, profStr);
+                localStorage.setItem(STORAGE_KEYS.PROFILE_BACKUP, profStr);
+            }
         }
 
         if (!localStorage.getItem(STORAGE_KEYS.DIET_RECORDS)) {
@@ -297,8 +283,8 @@ export class GymRatStorage {
     }
 
     /**
-     * 특정 날짜의 체성분 기록을 추가하거나 업데이트하며,
-     * 다른 날짜의 기존 기록들은 절대 삭제하지 않고 그대로 유지합니다.
+     * 사용자가 입력한 특정 날짜의 체성분 기록을 추가하거나 업데이트하며,
+     * 다른 날짜의 기존 사용자 기록들은 절대 삭제하지 않고 그대로 유지합니다.
      */
     static upsertWeightRecord(record) {
         const list = this.getWeightRecords();
@@ -311,6 +297,7 @@ export class GymRatStorage {
             bodyFatMassKg: Number(record.bodyFatMassKg),
             bodyFatPercentage: Number(record.bodyFatPercentage),
             memo: record.memo || "",
+            userCreated: true,
             updatedAt: Date.now()
         };
 
@@ -341,9 +328,6 @@ export class GymRatStorage {
 
     static deleteWeightRecord(id) {
         const current = this.getWeightRecords();
-        if (current.length <= 1) {
-            return false; // 최소 1개의 기준 기록은 보호
-        }
         const list = current.filter(r => r.id !== id);
         const serialized = JSON.stringify(list);
         localStorage.setItem(STORAGE_KEYS.WEIGHT_RECORDS, serialized);
@@ -353,6 +337,9 @@ export class GymRatStorage {
         const latest = list[list.length - 1];
         if (latest) {
             profile.currentWeightKg = Number(latest.weightKg);
+            profile.startWeightKg = Number(list[0].weightKg);
+            profile.startSkeletalMuscleKg = Number(list[0].skeletalMuscleMassKg);
+            profile.startBodyFatPercent = Number(list[0].bodyFatPercentage);
             this.saveProfile(profile);
         }
         return true;
