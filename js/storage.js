@@ -1,10 +1,15 @@
 /**
- * GymRat — LocalStorage 영구 저장소 & 고정 식단/운동 프리셋 데이터 레이어
+ * GymRat - LocalStorage 영구 저장소 & 데이터 무결성 보존 레이어
+ * - 업데이트 시에도 기존 기록이 절대 삭제되거나 초기화되지 않도록 이중 백업 병합(Merge) 적용
  */
+
+import { getLocalDateString } from "./calculator.js";
 
 const STORAGE_KEYS = {
     PROFILE: "gymrat_user_profile_v1",
+    PROFILE_BACKUP: "gymrat_user_profile_backup",
     WEIGHT_RECORDS: "gymrat_weight_records_v1",
+    WEIGHT_RECORDS_BACKUP: "gymrat_weight_records_backup",
     DIET_RECORDS: "gymrat_diet_records_v1",
     WORKOUT_RECORDS: "gymrat_workout_records_v1",
     DAILY_CHECKLISTS: "gymrat_daily_checklists_v1"
@@ -96,15 +101,42 @@ export const MachinePresets = [
     { name: "숄더 프레스 머신", muscle: "어깨" }
 ];
 
-function offsetDateStr(daysOffset) {
+function offsetLocalDateStr(daysOffset) {
     const d = new Date();
     d.setDate(d.getDate() + daysOffset);
-    return d.toISOString().slice(0, 10);
+    return getLocalDateString(d);
+}
+
+function safeParseArray(raw) {
+    if (!raw) return null;
+    try {
+        const parsed = JSON.parse(raw);
+        return Array.isArray(parsed) ? parsed : null;
+    } catch {
+        return null;
+    }
+}
+
+function safeParseObject(raw) {
+    if (!raw) return null;
+    try {
+        const parsed = JSON.parse(raw);
+        return parsed && typeof parsed === "object" ? parsed : null;
+    } catch {
+        return null;
+    }
 }
 
 export class GymRatStorage {
+    /**
+     * 최초 실행 시에만 기본 프로필과 초기 샘플 기록을 세팅하며,
+     * 이미 저장된 기록이나 백업 기록이 하나라도 존재하면 기존 데이터를 100% 보존합니다.
+     */
     static ensureSeeded() {
-        if (!localStorage.getItem(STORAGE_KEYS.PROFILE)) {
+        const primaryProfile = safeParseObject(localStorage.getItem(STORAGE_KEYS.PROFILE));
+        const backupProfile = safeParseObject(localStorage.getItem(STORAGE_KEYS.PROFILE_BACKUP));
+
+        if (!primaryProfile && !backupProfile) {
             const defaultProfile = {
                 heightCm: 184.0,
                 startWeightKg: 104.60,
@@ -120,49 +152,84 @@ export class GymRatStorage {
                 dailyTargetFatG: 85,
                 dailyTargetWaterMl: 2800
             };
-            localStorage.setItem(STORAGE_KEYS.PROFILE, JSON.stringify(defaultProfile));
+            const serialized = JSON.stringify(defaultProfile);
+            localStorage.setItem(STORAGE_KEYS.PROFILE, serialized);
+            localStorage.setItem(STORAGE_KEYS.PROFILE_BACKUP, serialized);
+        } else if (!primaryProfile && backupProfile) {
+            localStorage.setItem(STORAGE_KEYS.PROFILE, JSON.stringify(backupProfile));
+        } else if (primaryProfile && !backupProfile) {
+            localStorage.setItem(STORAGE_KEYS.PROFILE_BACKUP, JSON.stringify(primaryProfile));
         }
 
-        if (!localStorage.getItem(STORAGE_KEYS.WEIGHT_RECORDS)) {
+        const primaryWeights = safeParseArray(localStorage.getItem(STORAGE_KEYS.WEIGHT_RECORDS));
+        const backupWeights = safeParseArray(localStorage.getItem(STORAGE_KEYS.WEIGHT_RECORDS_BACKUP));
+
+        if ((!primaryWeights || primaryWeights.length === 0) && (!backupWeights || backupWeights.length === 0)) {
             const initialRecords = [
                 {
                     id: 1,
-                    recordDate: offsetDateStr(-14),
+                    recordDate: offsetLocalDateStr(-14),
                     weightKg: 105.40,
                     skeletalMuscleMassKg: 42.90,
                     bodyFatMassKg: 30.57,
                     bodyFatPercentage: 29.0,
-                    memo: "다이어트 시작 2주 전 측정"
+                    memo: "1주차 시작 기준점 측정",
+                    updatedAt: Date.now() - 300000
                 },
                 {
                     id: 2,
-                    recordDate: offsetDateStr(-7),
+                    recordDate: offsetLocalDateStr(-7),
                     weightKg: 104.98,
                     skeletalMuscleMassKg: 42.95,
                     bodyFatMassKg: 30.23,
                     bodyFatPercentage: 28.8,
-                    memo: "지난주 월요일 기준점 측정"
+                    memo: "2주차 기준점 측정",
+                    updatedAt: Date.now() - 200000
                 },
                 {
                     id: 3,
-                    recordDate: offsetDateStr(-1),
+                    recordDate: offsetLocalDateStr(-1),
                     weightKg: 104.60,
                     skeletalMuscleMassKg: 42.97,
                     bodyFatMassKg: 29.92,
                     bodyFatPercentage: 28.6,
-                    memo: "어제 측정 (104.60kg / 골격근 42.97kg / 체지방 28.6%)"
+                    memo: "직전 측정 (104.60kg / 골격근 42.97kg / 체지방 28.6%)",
+                    updatedAt: Date.now() - 100000
                 },
                 {
                     id: 4,
-                    recordDate: offsetDateStr(0),
+                    recordDate: offsetLocalDateStr(0),
                     weightKg: 104.40,
                     skeletalMuscleMassKg: 42.80,
                     bodyFatMassKg: 29.86,
                     bodyFatPercentage: 28.6,
-                    memo: "오늘 측정 (104.40kg · 지난번 대비 -0.20kg)"
+                    memo: "오늘 측정 (104.40kg / 지난번 대비 -0.20kg)",
+                    updatedAt: Date.now()
                 }
             ];
-            localStorage.setItem(STORAGE_KEYS.WEIGHT_RECORDS, JSON.stringify(initialRecords));
+            const serialized = JSON.stringify(initialRecords);
+            localStorage.setItem(STORAGE_KEYS.WEIGHT_RECORDS, serialized);
+            localStorage.setItem(STORAGE_KEYS.WEIGHT_RECORDS_BACKUP, serialized);
+        } else {
+            // 기존 기록과 백업 기록을 날짜 기준으로 무손실 병합
+            const mergedMap = new Map();
+            (backupWeights || []).forEach(r => {
+                if (r && r.recordDate) mergedMap.set(r.recordDate, r);
+            });
+            (primaryWeights || []).forEach(r => {
+                if (r && r.recordDate) {
+                    const existing = mergedMap.get(r.recordDate);
+                    if (!existing || (r.updatedAt || 0) >= (existing.updatedAt || 0)) {
+                        mergedMap.set(r.recordDate, r);
+                    }
+                }
+            });
+            const mergedList = Array.from(mergedMap.values()).sort((a, b) =>
+                a.recordDate.localeCompare(b.recordDate)
+            );
+            const serialized = JSON.stringify(mergedList);
+            localStorage.setItem(STORAGE_KEYS.WEIGHT_RECORDS, serialized);
+            localStorage.setItem(STORAGE_KEYS.WEIGHT_RECORDS_BACKUP, serialized);
         }
 
         if (!localStorage.getItem(STORAGE_KEYS.DIET_RECORDS)) {
@@ -180,19 +247,28 @@ export class GymRatStorage {
 
     static getProfile() {
         this.ensureSeeded();
-        return JSON.parse(localStorage.getItem(STORAGE_KEYS.PROFILE));
+        return safeParseObject(localStorage.getItem(STORAGE_KEYS.PROFILE)) ||
+            safeParseObject(localStorage.getItem(STORAGE_KEYS.PROFILE_BACKUP));
     }
 
     static saveProfile(profile) {
-        localStorage.setItem(STORAGE_KEYS.PROFILE, JSON.stringify(profile));
+        const serialized = JSON.stringify(profile);
+        localStorage.setItem(STORAGE_KEYS.PROFILE, serialized);
+        localStorage.setItem(STORAGE_KEYS.PROFILE_BACKUP, serialized);
     }
 
     static getWeightRecords() {
         this.ensureSeeded();
-        const list = JSON.parse(localStorage.getItem(STORAGE_KEYS.WEIGHT_RECORDS) || "[]");
-        return list.sort((a, b) => a.recordDate.localeCompare(b.recordDate));
+        const list = safeParseArray(localStorage.getItem(STORAGE_KEYS.WEIGHT_RECORDS)) ||
+            safeParseArray(localStorage.getItem(STORAGE_KEYS.WEIGHT_RECORDS_BACKUP)) ||
+            [];
+        return [...list].sort((a, b) => a.recordDate.localeCompare(b.recordDate));
     }
 
+    /**
+     * 특정 날짜의 체성분 기록을 추가하거나 업데이트하며,
+     * 다른 날짜의 기존 기록들은 절대 삭제하지 않고 그대로 유지합니다.
+     */
     static upsertWeightRecord(record) {
         const list = this.getWeightRecords();
         const existingIndex = list.findIndex(r => r.recordDate === record.recordDate);
@@ -203,7 +279,8 @@ export class GymRatStorage {
             skeletalMuscleMassKg: Number(record.skeletalMuscleMassKg),
             bodyFatMassKg: Number(record.bodyFatMassKg),
             bodyFatPercentage: Number(record.bodyFatPercentage),
-            memo: record.memo || ""
+            memo: record.memo || "",
+            updatedAt: Date.now()
         };
 
         if (existingIndex >= 0) {
@@ -212,26 +289,52 @@ export class GymRatStorage {
             list.push(normalized);
         }
         list.sort((a, b) => a.recordDate.localeCompare(b.recordDate));
-        localStorage.setItem(STORAGE_KEYS.WEIGHT_RECORDS, JSON.stringify(list));
+
+        const serialized = JSON.stringify(list);
+        localStorage.setItem(STORAGE_KEYS.WEIGHT_RECORDS, serialized);
+        localStorage.setItem(STORAGE_KEYS.WEIGHT_RECORDS_BACKUP, serialized);
 
         const profile = this.getProfile();
-        profile.currentWeightKg = normalized.weightKg;
+        const latestRecord = list[list.length - 1];
+        if (latestRecord) {
+            profile.currentWeightKg = Number(latestRecord.weightKg);
+        }
+        if (list.length > 0) {
+            profile.startWeightKg = Number(list[0].weightKg);
+            profile.startSkeletalMuscleKg = Number(list[0].skeletalMuscleMassKg);
+            profile.startBodyFatPercent = Number(list[0].bodyFatPercentage);
+        }
         this.saveProfile(profile);
+        return list;
     }
 
     static deleteWeightRecord(id) {
-        const list = this.getWeightRecords().filter(r => r.id !== id);
-        localStorage.setItem(STORAGE_KEYS.WEIGHT_RECORDS, JSON.stringify(list));
+        const current = this.getWeightRecords();
+        if (current.length <= 1) {
+            return false; // 최소 1개의 기준 기록은 보호
+        }
+        const list = current.filter(r => r.id !== id);
+        const serialized = JSON.stringify(list);
+        localStorage.setItem(STORAGE_KEYS.WEIGHT_RECORDS, serialized);
+        localStorage.setItem(STORAGE_KEYS.WEIGHT_RECORDS_BACKUP, serialized);
+
+        const profile = this.getProfile();
+        const latest = list[list.length - 1];
+        if (latest) {
+            profile.currentWeightKg = Number(latest.weightKg);
+            this.saveProfile(profile);
+        }
+        return true;
     }
 
     static getDietRecordsByDate(dateStr) {
         this.ensureSeeded();
-        const all = JSON.parse(localStorage.getItem(STORAGE_KEYS.DIET_RECORDS) || "[]");
+        const all = safeParseArray(localStorage.getItem(STORAGE_KEYS.DIET_RECORDS)) || [];
         return all.filter(d => d.recordDate === dateStr);
     }
 
     static toggleTemplateDiet(dateStr, template) {
-        const all = JSON.parse(localStorage.getItem(STORAGE_KEYS.DIET_RECORDS) || "[]");
+        const all = safeParseArray(localStorage.getItem(STORAGE_KEYS.DIET_RECORDS)) || [];
         const idx = all.findIndex(d => d.recordDate === dateStr && d.templateCode === template.templateCode);
         if (idx >= 0) {
             all.splice(idx, 1);
@@ -256,7 +359,7 @@ export class GymRatStorage {
     }
 
     static selectDinnerRecommendation(dateStr, dinnerTemplate) {
-        let all = JSON.parse(localStorage.getItem(STORAGE_KEYS.DIET_RECORDS) || "[]");
+        let all = safeParseArray(localStorage.getItem(STORAGE_KEYS.DIET_RECORDS)) || [];
         const dinnerCodes = FixedRoutineTemplates.DINNER_RECOMMENDATIONS.map(d => d.templateCode);
         const alreadySelected = all.some(
             d => d.recordDate === dateStr && d.templateCode === dinnerTemplate.templateCode
@@ -284,7 +387,7 @@ export class GymRatStorage {
 
     static getChecklist(dateStr) {
         this.ensureSeeded();
-        const map = JSON.parse(localStorage.getItem(STORAGE_KEYS.DAILY_CHECKLISTS) || "{}");
+        const map = safeParseObject(localStorage.getItem(STORAGE_KEYS.DAILY_CHECKLISTS)) || {};
         return map[dateStr] || {
             recordDate: dateStr,
             creatine5gTaken: false,
@@ -297,31 +400,32 @@ export class GymRatStorage {
     }
 
     static saveChecklist(dateStr, checklist) {
-        const map = JSON.parse(localStorage.getItem(STORAGE_KEYS.DAILY_CHECKLISTS) || "{}");
+        const map = safeParseObject(localStorage.getItem(STORAGE_KEYS.DAILY_CHECKLISTS)) || {};
         map[dateStr] = checklist;
         localStorage.setItem(STORAGE_KEYS.DAILY_CHECKLISTS, JSON.stringify(map));
     }
 
     static getWorkoutRecordsByDate(dateStr) {
         this.ensureSeeded();
-        const all = JSON.parse(localStorage.getItem(STORAGE_KEYS.WORKOUT_RECORDS) || "[]");
+        const all = safeParseArray(localStorage.getItem(STORAGE_KEYS.WORKOUT_RECORDS)) || [];
         return all.filter(w => w.recordDate === dateStr);
     }
 
     static getWeeklyWorkoutDaysCount(dateStr) {
         this.ensureSeeded();
-        const all = JSON.parse(localStorage.getItem(STORAGE_KEYS.WORKOUT_RECORDS) || "[]");
-        const checklistMap = JSON.parse(localStorage.getItem(STORAGE_KEYS.DAILY_CHECKLISTS) || "{}");
+        const all = safeParseArray(localStorage.getItem(STORAGE_KEYS.WORKOUT_RECORDS)) || [];
+        const checklistMap = safeParseObject(localStorage.getItem(STORAGE_KEYS.DAILY_CHECKLISTS)) || {};
 
-        const d = new Date(dateStr + "T00:00:00");
+        const [y, m, dayNum] = dateStr.split("-").map(Number);
+        const d = new Date(y, m - 1, dayNum);
         const day = d.getDay();
         const diff = d.getDate() - day + (day === 0 ? -6 : 1);
-        const monday = new Date(d.setDate(diff));
-        const mondayStr = monday.toISOString().slice(0, 10);
+        const monday = new Date(d.getFullYear(), d.getMonth(), diff);
+        const mondayStr = getLocalDateString(monday);
 
         const sunday = new Date(monday);
         sunday.setDate(monday.getDate() + 6);
-        const sundayStr = sunday.toISOString().slice(0, 10);
+        const sundayStr = getLocalDateString(sunday);
 
         const activeDates = new Set();
         all.forEach(w => {
@@ -342,7 +446,7 @@ export class GymRatStorage {
     }
 
     static addWorkoutSet(record) {
-        const all = JSON.parse(localStorage.getItem(STORAGE_KEYS.WORKOUT_RECORDS) || "[]");
+        const all = safeParseArray(localStorage.getItem(STORAGE_KEYS.WORKOUT_RECORDS)) || [];
         all.push({
             id: Date.now() + Math.floor(Math.random() * 1000),
             ...record
@@ -351,7 +455,7 @@ export class GymRatStorage {
     }
 
     static deleteWorkoutSet(id) {
-        const all = JSON.parse(localStorage.getItem(STORAGE_KEYS.WORKOUT_RECORDS) || "[]")
+        const all = (safeParseArray(localStorage.getItem(STORAGE_KEYS.WORKOUT_RECORDS)) || [])
             .filter(w => w.id !== id);
         localStorage.setItem(STORAGE_KEYS.WORKOUT_RECORDS, JSON.stringify(all));
     }

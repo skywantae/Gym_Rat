@@ -1,6 +1,6 @@
 /**
- * GymRat — 의학 및 스포츠 영양학(ACSM, ISSN, Helms et al. 2014, Alpert 2005) 기반
- * 주간 안전 감량 속도 및 골격근 방어 알고리즘 엔진
+ * GymRat - 의학 및 스포츠 영양학(ACSM, ISSN, Helms et al. 2014, Alpert 2005) 기반
+ * 주간 안전 감량 속도, 주차 계산 및 이전/이후 몸무게 로드맵 엔진
  */
 
 export const MetricBadges = {
@@ -12,6 +12,18 @@ export const MetricBadges = {
     OPTIMAL: { label: "적정/목표도달", dotClass: "dot-lime", textClass: "text-lime" }
 };
 
+export function getLocalDateString(dateObj = new Date()) {
+    const year = dateObj.getFullYear();
+    const month = String(dateObj.getMonth() + 1).padStart(2, "0");
+    const day = String(dateObj.getDate()).padStart(2, "0");
+    return `${year}-${month}-${day}`;
+}
+
+export function parseLocalDate(dateStr) {
+    const [y, m, d] = dateStr.split("-").map(Number);
+    return new Date(y, m - 1, d);
+}
+
 export class SafeWeightLossCalculator {
     static round1(val) {
         return Math.round(val * 10) / 10;
@@ -22,41 +34,92 @@ export class SafeWeightLossCalculator {
     }
 
     /**
-     * 이번 주 월요일 날짜(YYYY-MM-DD)를 반환합니다.
+     * 특정 날짜(YYYY-MM-DD)가 속한 주의 월요일 날짜(YYYY-MM-DD)를 반환합니다.
      */
     static getMondayDateString(dateStr) {
-        const d = dateStr ? new Date(dateStr + "T00:00:00") : new Date();
+        const d = dateStr ? parseLocalDate(dateStr) : new Date();
         const day = d.getDay(); // 0(일) ~ 6(토)
         const diff = d.getDate() - day + (day === 0 ? -6 : 1);
-        const monday = new Date(d.setDate(diff));
-        return monday.toISOString().slice(0, 10);
+        const monday = new Date(d.getFullYear(), d.getMonth(), diff);
+        return getLocalDateString(monday);
+    }
+
+    /**
+     * 시작일과 기준일 사이의 주차(1주차부터 시작)를 계산합니다.
+     */
+    static calculateWeekNumber(startDateStr, targetDateStr) {
+        const startMonday = parseLocalDate(this.getMondayDateString(startDateStr));
+        const targetMonday = parseLocalDate(this.getMondayDateString(targetDateStr));
+        const diffMs = targetMonday.getTime() - startMonday.getTime();
+        const diffWeeks = Math.floor(diffMs / (7 * 24 * 60 * 60 * 1000));
+        return Math.max(1, diffWeeks + 1);
+    }
+
+    /**
+     * 체지방률과 골격근 여유분을 바탕으로 주간 안전 감량폭(kg)을 계산합니다.
+     */
+    static computeWeeklySafeLossKg(weightKg, fatPercent, fatMassKg, muscleKg, minTargetMuscleKg, recentMuscleDeltaKg = 0) {
+        let baseWeeklyRatePercent = 0.65;
+        if (fatPercent >= 27.0) {
+            baseWeeklyRatePercent = 0.76;
+        } else if (fatPercent >= 24.0) {
+            baseWeeklyRatePercent = 0.70;
+        } else if (fatPercent >= 21.0) {
+            baseWeeklyRatePercent = 0.62;
+        } else if (fatPercent >= 19.0) {
+            baseWeeklyRatePercent = 0.54;
+        } else {
+            baseWeeklyRatePercent = 0.45;
+        }
+
+        const muscleSafetyBufferKg = this.round2(muscleKg - minTargetMuscleKg);
+        let muscleDefenseFactor = 1.0;
+        if (muscleSafetyBufferKg < 0.3 || recentMuscleDeltaKg <= -0.4) {
+            muscleDefenseFactor = 0.68;
+        } else if (muscleSafetyBufferKg < 1.0 || recentMuscleDeltaKg <= -0.2) {
+            muscleDefenseFactor = 0.85;
+        }
+
+        const weeklySafeLossRatePercent = this.round2(baseWeeklyRatePercent * muscleDefenseFactor);
+        const rawWeeklyLossKg = weightKg * (weeklySafeLossRatePercent / 100);
+        const maxSafeFatLossPerWeekKg = ((fatMassKg * 69 * 7) / 7700) * 0.80;
+        const clampedWeeklyLoss = Math.min(rawWeeklyLossKg, maxSafeFatLossPerWeekKg);
+        const weeklyTargetLossKg = this.round2(Math.max(0.35, Math.min(1.10, clampedWeeklyLoss)));
+
+        return {
+            weeklySafeLossRatePercent,
+            weeklyTargetLossKg,
+            muscleSafetyBufferKg
+        };
     }
 
     /**
      * 사용자의 프로필 및 체성분 기록 배열을 분석하여
-     * 1) 직전 기록 대비 변화량 (몸무게, 골격근량, 체지방량, 체지방률, BMI)
-     * 2) 체지방률 & 골격근량 기반 1주일 안전 감량 목표(kg) 및 이번 주 남은 감량치
-     * 3) 최종 목표(90.0kg / 골격근 41kg 방어 / 체지방 19~20%) 예상 소요 주수 및 코칭 리포트를 반환합니다.
+     * 현재 상태, 직전 대비 증감, 현재 주차, 이전 기록, 이후 주차별 예상 몸무게 로드맵을 계산합니다.
      */
     static calculate(profile, records) {
         const sorted = [...records].sort((a, b) => a.recordDate.localeCompare(b.recordDate));
+        const firstRecord = sorted.length > 0 ? sorted[0] : null;
         const latest = sorted.length > 0 ? sorted[sorted.length - 1] : null;
         const previous = sorted.length >= 2 ? sorted[sorted.length - 2] : null;
 
+        const todayStr = getLocalDateString();
         const currentWeightKg = latest ? Number(latest.weightKg) : Number(profile.currentWeightKg);
         const currentMuscleKg = latest ? Number(latest.skeletalMuscleMassKg) : Number(profile.startSkeletalMuscleKg);
         const currentFatPercent = latest ? Number(latest.bodyFatPercentage) : Number(profile.startBodyFatPercent);
         const currentFatMassKg = latest && latest.bodyFatMassKg != null
             ? Number(latest.bodyFatMassKg)
             : this.round2(currentWeightKg * (currentFatPercent / 100));
-        const latestDate = latest ? latest.recordDate : new Date().toISOString().slice(0, 10);
+        const latestDate = latest ? latest.recordDate : todayStr;
+
+        const startDateStr = firstRecord ? firstRecord.recordDate : latestDate;
+        const currentWeekNumber = this.calculateWeekNumber(startDateStr, latestDate);
 
         const heightM = Math.max(1.2, Number(profile.heightCm) / 100);
         const currentBmi = this.round1(currentWeightKg / (heightM * heightM));
         const fatFreeMassKg = Math.max(40, currentWeightKg - currentFatMassKg);
         const currentFfmi = this.round1(fatFreeMassKg / (heightM * heightM));
 
-        // 직전 측정 대비 증감 (앳플리 '지난 번 대비' 섹션용)
         const prevWeightKg = previous ? Number(previous.weightKg) : currentWeightKg;
         const prevMuscleKg = previous ? Number(previous.skeletalMuscleMassKg) : currentMuscleKg;
         const prevFatPercent = previous ? Number(previous.bodyFatPercentage) : currentFatPercent;
@@ -71,59 +134,30 @@ export class SafeWeightLossCalculator {
         const fatPercentDeltaFromPrev = this.round1(currentFatPercent - prevFatPercent);
         const bmiDeltaFromPrev = this.round1(currentBmi - prevBmi);
 
-        // -------------------------------------------------------------------------
-        // [의학 & 스포츠 영양학 안전 감량 속도 알고리즘]
-        // 1) 체지방률(BF%) 구간별 기초 주간 감량 비율 (ISSN & Helms et al., 2014)
-        //    체지방률이 높을수록 지방 세포에서 동원 가능한 에너지가 커서 주당 체중의 0.75~0.76% 감량이 안전하며,
-        //    체지방률이 20% 이하로 낮아질수록 근손실 방어를 위해 0.54% 이하로 감속합니다.
-        // -------------------------------------------------------------------------
-        let baseWeeklyRatePercent = 0.65;
-        if (currentFatPercent >= 27.0) {
-            baseWeeklyRatePercent = 0.76;
-        } else if (currentFatPercent >= 24.0) {
-            baseWeeklyRatePercent = 0.70;
-        } else if (currentFatPercent >= 21.0) {
-            baseWeeklyRatePercent = 0.62;
-        } else if (currentFatPercent >= 19.0) {
-            baseWeeklyRatePercent = 0.54;
-        } else {
-            baseWeeklyRatePercent = 0.45;
-        }
-
-        // 2) 골격근량 방어 보정 계수 (Muscle Preservation Factor)
-        //    목표 최소 골격근량(예: 41.0kg) 대비 현재 여유분(buffer)과 최근 골격근 변화 추이를 반영합니다.
         const minTargetMuscleKg = Number(profile.minTargetSkeletalMuscleKg);
-        const muscleSafetyBufferKg = this.round2(currentMuscleKg - minTargetMuscleKg);
+        const {
+            weeklySafeLossRatePercent,
+            weeklyTargetLossKg,
+            muscleSafetyBufferKg
+        } = this.computeWeeklySafeLossKg(
+            currentWeightKg,
+            currentFatPercent,
+            currentFatMassKg,
+            currentMuscleKg,
+            minTargetMuscleKg,
+            muscleDeltaFromPrevKg
+        );
 
-        let muscleDefenseFactor = 1.0;
-        if (muscleSafetyBufferKg < 0.3 || muscleDeltaFromPrevKg <= -0.4) {
-            muscleDefenseFactor = 0.68; // 근손실 경계: 감량 속도 즉시 완화
-        } else if (muscleSafetyBufferKg < 1.0 || muscleDeltaFromPrevKg <= -0.2) {
-            muscleDefenseFactor = 0.85; // 주의 구간: 보수적 감량
-        } else {
-            muscleDefenseFactor = 1.0;  // 골격근 방어 우수: 최적 속도 유지
-        }
-
-        const weeklySafeLossRatePercent = this.round2(baseWeeklyRatePercent * muscleDefenseFactor);
-        const rawWeeklyLossKg = currentWeightKg * (weeklySafeLossRatePercent / 100);
-
-        // 3) Alpert (2005) 체지방 조직 최대 에너지 동원 상한 검증 (69 kcal / kg fat / day)
-        //    생리학적 한계의 80% 이내로 클램핑하여 근단백질 이화작용(Catabolism) 원천 차단
-        const maxSafeFatLossPerWeekKg = ((currentFatMassKg * 69 * 7) / 7700) * 0.80;
-        const clampedWeeklyLoss = Math.min(rawWeeklyLossKg, maxSafeFatLossPerWeekKg);
-        const weeklyTargetLossKg = this.round2(Math.max(0.35, Math.min(1.10, clampedWeeklyLoss)));
-
-        // 4) 이번 주(월요일~현재) 시작 체중 및 이번 주 남은 감량 목표 계산
-        const todayStr = new Date().toISOString().slice(0, 10);
-        const mondayStr = this.getMondayDateString(todayStr);
+        // 이번 주(월요일~일요일) 시작 체중 및 이번 주 남은 감량치 계산
+        const mondayStr = this.getMondayDateString(latestDate);
         const recordsBeforeThisWeek = sorted.filter(r => r.recordDate < mondayStr);
         const recordsInThisWeek = sorted.filter(r => r.recordDate >= mondayStr);
 
         let thisWeekStartWeightKg = currentWeightKg;
-        if (recordsInThisWeek.length >= 2) {
-            thisWeekStartWeightKg = Number(recordsInThisWeek[0].weightKg);
-        } else if (recordsBeforeThisWeek.length > 0) {
+        if (recordsBeforeThisWeek.length > 0) {
             thisWeekStartWeightKg = Number(recordsBeforeThisWeek[recordsBeforeThisWeek.length - 1].weightKg);
+        } else if (recordsInThisWeek.length >= 2) {
+            thisWeekStartWeightKg = Number(recordsInThisWeek[0].weightKg);
         }
 
         const targetWeightKg = Number(profile.targetWeightKg);
@@ -138,21 +172,96 @@ export class SafeWeightLossCalculator {
             ? Math.min(1, Math.max(0, alreadyLostThisWeekKg / weeklyTargetLossKg))
             : 1;
 
-        // 5) 최종 목표(90.0kg)까지 총 잔여 체중 및 예상 소요 주수
-        const totalRemainingWeightKg = this.round2(Math.max(0, currentWeightKg - targetWeightKg));
-        const estimatedWeeksToFinalGoal = totalRemainingWeightKg <= 0
-            ? 0
-            : Math.ceil(totalRemainingWeightKg / weeklyTargetLossKg);
+        // 이전 기록 리스트 (주차 및 직전 대비 변화량 포함)
+        const pastRecordsWithMeta = sorted.map((rec, idx) => {
+            const prevRec = idx > 0 ? sorted[idx - 1] : null;
+            const w = Number(rec.weightKg);
+            const m = Number(rec.skeletalMuscleMassKg);
+            const fp = Number(rec.bodyFatPercentage);
+            const fm = rec.bodyFatMassKg != null ? Number(rec.bodyFatMassKg) : this.round2(w * (fp / 100));
+            const deltaW = prevRec ? this.round2(w - Number(prevRec.weightKg)) : 0;
+            const weekNum = this.calculateWeekNumber(startDateStr, rec.recordDate);
+            return {
+                ...rec,
+                weightKg: w,
+                skeletalMuscleMassKg: m,
+                bodyFatMassKg: fm,
+                bodyFatPercentage: fp,
+                deltaWeightKg: deltaW,
+                weekNumber: weekNum
+            };
+        }).reverse();
 
-        const targetDateObj = new Date();
-        targetDateObj.setDate(targetDateObj.getDate() + estimatedWeeksToFinalGoal * 7);
-        const estimatedTargetDate = targetDateObj.toISOString().slice(0, 10);
+        // 이후 주차별 예상 몸무게 시뮬레이션 로드맵 생성
+        const futureWeeklyRoadmap = [];
+        let simWeight = currentWeightKg;
+        let simFatMass = currentFatMassKg;
+        const baseMondayDate = parseLocalDate(mondayStr);
+        let weekOffset = 1;
+
+        // 먼저 이번 주(현재 주차) 목표 행 추가
+        const thisWeekSunday = new Date(baseMondayDate);
+        thisWeekSunday.setDate(thisWeekSunday.getDate() + 6);
+        futureWeeklyRoadmap.push({
+            weekNumber: currentWeekNumber,
+            isCurrentWeek: true,
+            dateRangeText: `${mondayStr.slice(5)} ~ ${getLocalDateString(thisWeekSunday).slice(5)}`,
+            weeklyLossKg: remainingToLoseThisWeekKg,
+            expectedWeightKg: this.round2(Math.max(targetWeightKg, currentWeightKg - remainingToLoseThisWeekKg)),
+            expectedFatPercent: this.round1(
+                ((Math.max(5, simFatMass - remainingToLoseThisWeekKg)) /
+                    Math.max(targetWeightKg, currentWeightKg - remainingToLoseThisWeekKg)) * 100
+            )
+        });
+
+        simWeight = this.round2(Math.max(targetWeightKg, currentWeightKg - remainingToLoseThisWeekKg));
+        simFatMass = this.round2(Math.max(5, simFatMass - remainingToLoseThisWeekKg * 0.9));
+
+        while (simWeight > targetWeightKg + 0.05 && weekOffset <= 52) {
+            const simFatPct = this.round1((simFatMass / simWeight) * 100);
+            const stepCalc = this.computeWeeklySafeLossKg(
+                simWeight,
+                simFatPct,
+                simFatMass,
+                currentMuscleKg,
+                minTargetMuscleKg,
+                0
+            );
+            const stepLoss = Math.min(
+                stepCalc.weeklyTargetLossKg,
+                this.round2(simWeight - targetWeightKg)
+            );
+            simWeight = this.round2(simWeight - stepLoss);
+            simFatMass = this.round2(Math.max(5, simFatMass - stepLoss * 0.9));
+            const nextFatPct = this.round1((simFatMass / simWeight) * 100);
+
+            const wkMon = new Date(baseMondayDate);
+            wkMon.setDate(wkMon.getDate() + weekOffset * 7);
+            const wkSun = new Date(wkMon);
+            wkSun.setDate(wkSun.getDate() + 6);
+
+            futureWeeklyRoadmap.push({
+                weekNumber: currentWeekNumber + weekOffset,
+                isCurrentWeek: false,
+                dateRangeText: `${getLocalDateString(wkMon).slice(5)} ~ ${getLocalDateString(wkSun).slice(5)}`,
+                weeklyLossKg: stepLoss,
+                expectedWeightKg: simWeight,
+                expectedFatPercent: nextFatPct
+            });
+
+            weekOffset++;
+        }
+
+        const totalRemainingWeightKg = this.round2(Math.max(0, currentWeightKg - targetWeightKg));
+        const estimatedWeeksToFinalGoal = Math.max(0, futureWeeklyRoadmap.length - 1);
+        const targetDateObj = new Date(baseMondayDate);
+        targetDateObj.setDate(targetDateObj.getDate() + estimatedWeeksToFinalGoal * 7 + 6);
+        const estimatedTargetDate = getLocalDateString(targetDateObj);
 
         const recommendedDailyDeficitKcal = Math.round((weeklyTargetLossKg * 7700) / 7);
         const targetFatPercent = Number(profile.targetBodyFatPercent);
         const targetFatMassKg = this.round2(targetWeightKg * (targetFatPercent / 100));
 
-        // 6) 앳플리 스타일 건강/방어 상태 배지
         const weightBadge = totalRemainingWeightKg > 8.0
             ? MetricBadges.EXCESS_HIGH
             : (totalRemainingWeightKg > 1.5 ? MetricBadges.MODERATE_HIGH : MetricBadges.OPTIMAL);
@@ -165,14 +274,16 @@ export class SafeWeightLossCalculator {
             ? MetricBadges.TOO_HIGH
             : (currentFatPercent > targetFatPercent + 1.0 ? MetricBadges.MODERATE_HIGH : MetricBadges.OPTIMAL);
 
-        const scienceCoachingTitle = `이번 주 권장 감량 목표: -${weeklyTargetLossKg.toFixed(2)}kg (체중의 ${weeklySafeLossRatePercent.toFixed(2)}%)`;
+        const scienceCoachingTitle = `[${currentWeekNumber}주차] 이번 주 권장 감량 목표: -${weeklyTargetLossKg.toFixed(2)}kg (체중의 ${weeklySafeLossRatePercent.toFixed(2)}%)`;
         const scienceCoachingDetail =
             `현재 체지방률(${currentFatPercent.toFixed(1)}%)과 골격근량(${currentMuscleKg.toFixed(2)}kg) 분석 결과, ` +
             `최종 목표까지 남은 ${totalRemainingWeightKg.toFixed(2)}kg을 한 번에 빼려 하지 말고 ` +
             `매주 ${weeklyTargetLossKg.toFixed(2)}kg씩 감량하는 것이 골격근 ${minTargetMuscleKg.toFixed(1)}kg 이상 방어에 가장 이상적입니다. ` +
-            `(일일 권장 에너지 적자 약 -${recommendedDailyDeficitKcal}kcal · 약 ${estimatedWeeksToFinalGoal}주 완주 코스)`;
+            `(일일 권장 에너지 적자 약 -${recommendedDailyDeficitKcal}kcal, 약 ${estimatedWeeksToFinalGoal}주 완주 코스)`;
 
         return {
+            startDateStr,
+            currentWeekNumber,
             latestDate,
             currentWeightKg,
             currentMuscleKg,
@@ -206,7 +317,9 @@ export class SafeWeightLossCalculator {
             muscleBadge,
             bodyFatBadge,
             scienceCoachingTitle,
-            scienceCoachingDetail
+            scienceCoachingDetail,
+            pastRecordsWithMeta,
+            futureWeeklyRoadmap
         };
     }
 }

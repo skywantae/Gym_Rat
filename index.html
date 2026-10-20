@@ -6,27 +6,27 @@
     <meta name="theme-color" content="#0D1117" />
     <meta name="apple-mobile-web-app-capable" content="yes" />
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
-    <title>GymRat — 과학적 체성분 감량 & 식단·운동 대시보드</title>
+    <title>GymRat - 과학적 체성분 감량 및 식단 운동 대시보드</title>
     <link rel="manifest" href="manifest.json" />
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/static/pretendard.min.css" />
     <link rel="stylesheet" href="css/styles.css" />
 </head>
 <body>
     <main class="app-container">
-        <!-- 상단 헤더 -->
+        <!-- 상단 헤더 (오늘 체성분 입력 버튼 단일화, 이모티콘 완전 제거) -->
         <header class="top-header">
             <div class="brand-title">
                 <span class="brand-badge">PRO CUTTING</span>
                 <h1>GymRat</h1>
             </div>
             <div class="header-actions">
-                <button type="button" class="btn-outline-lime js-open-goal-modal">🎯 목표 설정</button>
-                <button type="button" class="btn-primary-orange js-open-body-modal">✏️ 오늘 체성분 입력</button>
+                <button type="button" class="btn-outline-lime js-open-goal-modal">목표 설정</button>
+                <button type="button" class="btn-primary-orange js-open-body-modal">오늘 체성분 입력</button>
             </div>
         </header>
 
         <!-- =================================================================
-             화면 1: 메인 루틴 대시보드 (앳플리 스타일 몸무게 & 주간 목표 + 식단 + 운동)
+             화면 1: 메인 루틴 대시보드 (몸무게 & 주간 목표 + 식단 + 운동)
              ================================================================= -->
         <section id="screen-dashboard">
             <!-- 1. 앳플리(Atflee) 스타일 몸무게 정보 & 스포츠 영양학 주간 안전 감량 목표 카드 -->
@@ -36,9 +36,10 @@
                         <h2 class="card-title">몸무게 정보</h2>
                         <p id="latest-record-date" class="card-subtitle">최근 기록일: -</p>
                     </div>
+                    <span id="current-week-pill" class="week-status-pill">1주차 진행 중</span>
                 </div>
 
-                <!-- 좌: 현재 몸무게 / 우: 이번 주 안전 감량 목표까지 -->
+                <!-- 좌: 현재 몸무게 / 우: 이번 주 목표까지 (클릭 시 주차별 이전 기록 & 이후 예상 몸무게 모달 오픈) -->
                 <div class="atflee-dual-grid">
                     <div class="atflee-box-orange js-open-body-modal" title="클릭하여 오늘 체성분 입력">
                         <span class="box-caption">현재 몸무게</span>
@@ -46,17 +47,17 @@
                             <span id="atflee-current-weight" class="box-main-number">104.40</span>
                             <span class="box-unit">kg</span>
                         </div>
-                        <span class="box-hint">터치하여 오늘 측정값 입력</span>
+                        <span class="box-hint">터치하여 오늘 체성분 입력</span>
                     </div>
 
-                    <div class="atflee-box-white js-open-goal-modal" title="클릭하여 내 감량 목표 설정">
+                    <div id="box-weekly-target" class="atflee-box-white" title="클릭하여 주차별 이전 기록 및 이후 예상 몸무게 보기">
                         <span class="box-caption-dark">이번 주 목표까지</span>
                         <div>
                             <span id="atflee-weekly-remaining" class="box-target-number">- 0.58</span>
                             <span class="box-unit-orange">kg</span>
                         </div>
                         <span id="atflee-weekly-sub1" class="box-sub1">주간 권장 -0.78kg</span>
-                        <span id="atflee-weekly-sub2" class="box-sub2">최종 90.0kg까지 -14.40kg</span>
+                        <span id="atflee-weekly-sub2" class="box-sub2">터치하여 주차별 기록 및 이후 몸무게 보기</span>
                     </div>
                 </div>
 
@@ -274,7 +275,7 @@
                         <h2 class="card-title">주 4회 운동 루틴 & 천국의 계단</h2>
                         <p id="weekly-workout-badge" class="section-sub text-lime font-bold">이번 주 운동 달성: 0일 / 목표 4회</p>
                     </div>
-                    <button type="button" id="btn-open-workout-modal" class="btn-outline-lime">+ 세트 기록</button>
+                    <button type="button" id="btn-open-workout-modal" class="btn-outline-lime">세트 기록 추가</button>
                 </div>
 
                 <div class="checklist-row">
@@ -299,6 +300,7 @@
 
         <!-- =================================================================
              화면 2: 체중 · 골격근량 · 체지방 변화 그래프 화면
+             (중복되던 '+ 인바디 기록' 버튼 제거 완료)
              ================================================================= -->
         <section id="screen-graph" class="hidden">
             <article class="card">
@@ -307,7 +309,6 @@
                         <p class="card-subtitle">184cm · 체성분 리컴포지션 프로젝트</p>
                         <h2 class="card-title">체중 & 골격근량 추이 그래프</h2>
                     </div>
-                    <button type="button" class="btn-primary-orange js-open-body-modal">+ 인바디 기록</button>
                 </div>
 
                 <div class="progress-meta-row" style="margin-bottom: 6px;">
@@ -368,27 +369,25 @@
         </section>
     </main>
 
-    <!-- 하단 고정 네비게이션 -->
+    <!-- 하단 고정 네비게이션 (이모티콘 완전 제거) -->
     <nav class="bottom-nav">
         <div class="bottom-nav-inner">
             <button type="button" id="nav-btn-dashboard" class="nav-item active">
-                <span>📊</span>
                 <span>루틴 대시보드</span>
             </button>
             <button type="button" id="nav-btn-graph" class="nav-item">
-                <span>📈</span>
                 <span>체성분 그래프</span>
             </button>
         </div>
     </nav>
 
     <!-- =================================================================
-         모달 1: 매일 체중 · 골격근량 · 체지방량(kg) & 체지방률(%) 입력
+         모달 1: 오늘 체성분 입력 (체중 · 골격근량 · 체지방량 & 체지방률)
          ================================================================= -->
     <div id="modal-body-record" class="modal-backdrop hidden">
         <div class="modal-card">
-            <h3>오늘의 체중 · 골격근량 · 체지방량 기록</h3>
-            <p class="modal-sub">체지방량(kg)을 입력하면 체지방률(%)이 자동 계산됩니다.</p>
+            <h3>오늘 체성분 입력</h3>
+            <p class="modal-sub">체지방량(kg)을 입력하면 체지방률(%)이 자동 계산되며, 기존 날짜의 기록들은 모두 안전하게 보존됩니다.</p>
             <form id="form-body-record">
                 <div class="form-group">
                     <label for="input-body-date">측정 날짜</label>
@@ -420,7 +419,7 @@
                 </div>
                 <div class="modal-actions">
                     <button type="button" class="btn-cancel js-close-modal">취소</button>
-                    <button type="submit" class="btn-submit">오늘 기록 저장</button>
+                    <button type="submit" class="btn-submit">기록 저장</button>
                 </div>
             </form>
         </div>
@@ -431,7 +430,7 @@
          ================================================================= -->
     <div id="modal-goal-setting" class="modal-backdrop hidden">
         <div class="modal-card">
-            <h3>내 다이어트 & 근손실 방어 목표 설정</h3>
+            <h3>내 다이어트 및 근손실 방어 목표 설정</h3>
             <p class="modal-sub">설정된 목표를 기준으로 매주 가장 안전한 감량 속도(kg/주)가 자동 재계산됩니다.</p>
             <form id="form-goal-setting">
                 <div class="form-row-2">
@@ -504,6 +503,54 @@
                     <button type="submit" class="btn-submit">세트 추가</button>
                 </div>
             </form>
+        </div>
+    </div>
+
+    <!-- =================================================================
+         모달 4: '이번 주 목표까지' 클릭 시 열리는 주차별 현황 · 이전 기록 · 이후 예상 몸무게 모달
+         ================================================================= -->
+    <div id="modal-weekly-roadmap" class="modal-backdrop hidden">
+        <div class="modal-card modal-card-wide">
+            <div class="card-header-row" style="margin-bottom: 8px;">
+                <div>
+                    <h3 id="roadmap-modal-title">현재 1주차 감량 현황 및 로드맵</h3>
+                    <p id="roadmap-modal-subtitle" class="modal-sub" style="margin-bottom: 0;">시작일 기준 주차별 이전 측정 기록과 이후 목표 도달 예상 몸무게입니다.</p>
+                </div>
+            </div>
+
+            <!-- 현재 주차 핵심 요약 박스 -->
+            <div id="roadmap-current-week-banner" class="roadmap-summary-banner"></div>
+
+            <!-- 탭 전환: [이전 측정 기록] | [이후 주차별 예상 몸무게] -->
+            <div class="sub-tab-bar" style="margin-top: 12px;">
+                <button type="button" id="tab-btn-roadmap-past" class="sub-tab-btn active">이전 측정 기록</button>
+                <button type="button" id="tab-btn-roadmap-future" class="sub-tab-btn">이후 주차별 예상 몸무게</button>
+            </div>
+
+            <!-- 패널 A: 이전 측정 기록 리스트 -->
+            <div id="panel-roadmap-past" class="roadmap-scroll-area">
+                <div class="roadmap-table-head">
+                    <span>주차 / 날짜</span>
+                    <span>몸무게 (변화)</span>
+                    <span>골격근 / 체지방</span>
+                </div>
+                <div id="roadmap-past-rows"></div>
+            </div>
+
+            <!-- 패널 B: 이후 주차별 예상 몸무게 시뮬레이션 -->
+            <div id="panel-roadmap-future" class="roadmap-scroll-area hidden">
+                <div class="roadmap-table-head">
+                    <span>주차 (기간)</span>
+                    <span>주간 목표 감량</span>
+                    <span>예상 도달 몸무게</span>
+                </div>
+                <div id="roadmap-future-rows"></div>
+            </div>
+
+            <div class="modal-actions">
+                <button type="button" class="btn-outline-lime js-open-goal-from-roadmap">목표 수치 변경</button>
+                <button type="button" class="btn-submit js-close-modal">닫기</button>
+            </div>
         </div>
     </div>
 

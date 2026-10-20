@@ -1,22 +1,20 @@
 /**
- * GymRat — 메인 웹 애플리케이션 컨트롤러
- * - 앳플리(Atflee) 스타일 몸무게 & 스포츠 영양학 주간 목표 카드 렌더링
- * - 매일 체중·골격근량·체지방량(kg) & 체지방률(%) 상호 자동 계산 입력 모달
- * - 맞춤형 목표 설정 (90.0kg / 골격근 41kg 방어 / 체지방률 19~20%) 모달
- * - 아침/점심 고정 루틴 원클릭 등록 & 저녁 초저탄수 고단백 가이드
- * - 크레아틴 5g / 프로바이오틱스 / 수분 2.5~3.0L / 주 4회 웨이트 & 천국의 계단 로깅
- * - 반응형 체중·골격근량 오버레이 차트
+ * GymRat - 메인 웹 애플리케이션 컨트롤러
+ * - 이모티콘 완전 배제
+ * - '오늘 체성분 입력' 단일 진입점 및 저장 즉시 전 화면 실시간 반영 (기존 기록 100% 보존)
+ * - '이번 주 목표까지' 클릭 시 현재 주차, 이전 측정 기록, 이후 주차별 예상 몸무게 모달 표시
  */
 
-import { SafeWeightLossCalculator } from "./calculator.js";
+import { SafeWeightLossCalculator, getLocalDateString } from "./calculator.js";
 import { GymRatStorage, FixedRoutineTemplates, MachinePresets } from "./storage.js";
 import { GymRatCharts } from "./chart.js";
 
 class GymRatApp {
     constructor() {
-        this.todayStr = new Date().toISOString().slice(0, 10);
+        this.todayStr = getLocalDateString();
         this.activeBottomNav = "dashboard"; // "dashboard" | "graph"
         this.atfleeSubTab = "summary";      // "summary" | "science"
+        this.roadmapSubTab = "past";        // "past" | "future"
         this.chartPeriodDays = 30;          // 7 | 30 | 90 | 180 | null
         this.chartMetricTab = "OVERLAY";    // "OVERLAY" | "WEIGHT_ONLY" | "MUSCLE_ONLY" | "BODY_FAT_ONLY"
         this.selectedChartPointIndex = null;
@@ -64,7 +62,7 @@ class GymRatApp {
             this.renderDashboardScreen();
         });
 
-        // 체성분 입력 모달 열기 버튼들
+        // 오늘 체성분 입력 모달 열기 버튼들
         document.querySelectorAll(".js-open-body-modal").forEach(btn => {
             btn.addEventListener("click", () => this.openBodyRecordModal());
         });
@@ -72,6 +70,29 @@ class GymRatApp {
         // 목표 설정 모달 열기 버튼들
         document.querySelectorAll(".js-open-goal-modal").forEach(btn => {
             btn.addEventListener("click", () => this.openGoalSettingModal());
+        });
+
+        // '이번 주 목표까지' 박스 클릭 -> 현재 주차, 이전 기록, 이후 예상 몸무게 로드맵 모달 오픈
+        document.getElementById("box-weekly-target").addEventListener("click", () => {
+            this.openWeeklyRoadmapModal();
+        });
+
+        // 로드맵 모달 내 탭 전환 ([이전 측정 기록] | [이후 주차별 예상 몸무게])
+        document.getElementById("tab-btn-roadmap-past").addEventListener("click", () => {
+            this.roadmapSubTab = "past";
+            this.renderWeeklyRoadmapModalContent();
+        });
+        document.getElementById("tab-btn-roadmap-future").addEventListener("click", () => {
+            this.roadmapSubTab = "future";
+            this.renderWeeklyRoadmapModalContent();
+        });
+
+        // 로드맵 모달에서 목표 수치 변경 모달로 이동
+        document.querySelectorAll(".js-open-goal-from-roadmap").forEach(btn => {
+            btn.addEventListener("click", () => {
+                this.closeAllModals();
+                this.openGoalSettingModal();
+            });
         });
 
         // 웨이트 세트 모달 열기
@@ -84,11 +105,31 @@ class GymRatApp {
             btn.addEventListener("click", () => this.closeAllModals());
         });
 
-        // 체성분 모달: 체중 / 체지방량(kg) / 체지방률(%) 실시간 자동 상호 계산
+        // 체성분 모달: 날짜 변경 시 해당 날짜에 기존 기록이 있으면 불러오고 없으면 최신값 유지
+        const dateInput = document.getElementById("input-body-date");
         const weightInput = document.getElementById("input-body-weight");
+        const muscleInput = document.getElementById("input-body-muscle");
         const fatMassInput = document.getElementById("input-body-fat-mass");
         const fatPctInput = document.getElementById("input-body-fat-pct");
+        const memoInput = document.getElementById("input-body-memo");
 
+        dateInput.addEventListener("change", () => {
+            const selectedDate = dateInput.value;
+            const records = GymRatStorage.getWeightRecords();
+            const found = records.find(r => r.recordDate === selectedDate);
+            if (found) {
+                weightInput.value = Number(found.weightKg).toFixed(2);
+                muscleInput.value = Number(found.skeletalMuscleMassKg).toFixed(2);
+                const fm = found.bodyFatMassKg != null
+                    ? Number(found.bodyFatMassKg)
+                    : SafeWeightLossCalculator.round2(found.weightKg * (found.bodyFatPercentage / 100));
+                fatMassInput.value = fm.toFixed(2);
+                fatPctInput.value = Number(found.bodyFatPercentage).toFixed(1);
+                memoInput.value = found.memo || "";
+            }
+        });
+
+        // 체중 / 체지방량(kg) / 체지방률(%) 실시간 자동 상호 계산
         weightInput.addEventListener("input", () => {
             const w = parseFloat(weightInput.value);
             const fm = parseFloat(fatMassInput.value);
@@ -151,7 +192,7 @@ class GymRatApp {
             this.renderDashboardScreen();
             this.showToast(
                 added
-                    ? "점심 고정 루틴(구내식당+라떼) 등록 완료! 저녁 초저탄수 가이드를 확인하세요."
+                    ? "점심 고정 루틴(구내식당+라떼) 등록 완료. 저녁 초저탄수 가이드를 확인하세요."
                     : "점심 고정 루틴이 해제되었습니다."
             );
         });
@@ -168,7 +209,7 @@ class GymRatApp {
             checklist.creatine5gTaken = e.target.checked;
             GymRatStorage.saveChecklist(this.todayStr, checklist);
             if (e.target.checked) {
-                this.showToast("크레아틴 5g 복용 완료! 근세포 수분 보유 및 스트렝스 방어에 도움됩니다.");
+                this.showToast("크레아틴 5g 복용 완료. 근세포 수분 보유 및 스트렝스 방어에 도움됩니다.");
             }
         });
 
@@ -195,7 +236,7 @@ class GymRatApp {
             GymRatStorage.saveChecklist(this.todayStr, checklist);
             this.renderDashboardScreen();
             if (e.target.checked) {
-                this.showToast("천국의 계단 10분 고강도 인터벌 유산소 완료!");
+                this.showToast("천국의 계단 10분 고강도 인터벌 유산소 완료.");
             }
         });
 
@@ -241,9 +282,7 @@ class GymRatApp {
 
     renderAll() {
         this.renderDashboardScreen();
-        if (this.activeBottomNav === "graph") {
-            this.renderGraphScreen();
-        }
+        this.renderGraphScreen();
     }
 
     renderDashboardScreen() {
@@ -256,13 +295,16 @@ class GymRatApp {
         const weeklyWorkoutDays = GymRatStorage.getWeeklyWorkoutDaysCount(this.todayStr);
 
         // 1. 앳플리 스타일 상단 몸무게 & 이번 주 감량 목표 박스 업데이트
-        document.getElementById("latest-record-date").textContent = `최근 기록일: ${plan.latestDate}`;
+        document.getElementById("latest-record-date").textContent =
+            `최근 기록일: ${plan.latestDate} (총 ${weightRecords.length}회 기록 보존 중)`;
+        document.getElementById("current-week-pill").textContent =
+            `${plan.currentWeekNumber}주차 진행 중`;
         document.getElementById("atflee-current-weight").textContent = plan.currentWeightKg.toFixed(2);
         document.getElementById("atflee-weekly-remaining").textContent = `- ${plan.remainingToLoseThisWeekKg.toFixed(2)}`;
         document.getElementById("atflee-weekly-sub1").textContent =
-            `주간 권장 -${plan.weeklyTargetLossKg.toFixed(2)}kg (이번 주 목표 ${plan.thisWeekTargetWeightKg.toFixed(1)}kg)`;
+            `${plan.currentWeekNumber}주차 권장 -${plan.weeklyTargetLossKg.toFixed(2)}kg (목표 ${plan.thisWeekTargetWeightKg.toFixed(2)}kg)`;
         document.getElementById("atflee-weekly-sub2").textContent =
-            `최종 ${plan.targetWeightKg.toFixed(1)}kg까지 -${plan.totalRemainingWeightKg.toFixed(2)}kg (${plan.estimatedWeeksToFinalGoal}주 코스)`;
+            `터치하여 ${plan.currentWeekNumber}주차 이전 기록 및 이후 몸무게 보기`;
 
         // 2. 지난 번 대비 3열
         const formatSigned = val => (val > 0 ? `+${val.toFixed(2)}` : val.toFixed(2));
@@ -300,7 +342,7 @@ class GymRatApp {
             {
                 title: "골격근량",
                 value: `${plan.currentMuscleKg.toFixed(2)} kg`,
-                target: `방어 ≥${plan.minTargetMuscleKg.toFixed(1)}kg`,
+                target: `방어 ${plan.minTargetMuscleKg.toFixed(1)}kg 이상`,
                 badge: plan.muscleBadge
             },
             {
@@ -389,7 +431,7 @@ class GymRatApp {
 
         if (consumedProteinG >= targetProteinG) {
             proteinBanner.className = "protein-banner achieved";
-            proteinTitle.textContent = `일일 단백질 ${targetProteinG}g 필수 방어 목표 달성! ✓`;
+            proteinTitle.textContent = `일일 단백질 ${targetProteinG}g 필수 방어 목표 달성 완료`;
         } else {
             proteinBanner.className = "protein-banner pending";
             proteinTitle.textContent = `골격근 ${profile.minTargetSkeletalMuscleKg}kg 방어를 위해 단백질 ${remainingProtein}g 추가 필요`;
@@ -405,7 +447,7 @@ class GymRatApp {
             consumedFatG
         });
 
-        this.updateMacroBar("protein", consumedProteinG, targetProteinG, consumedProteinG >= targetProteinG ? "달성!" : `잔여 ${remainingProtein}g`);
+        this.updateMacroBar("protein", consumedProteinG, targetProteinG, consumedProteinG >= targetProteinG ? "달성 완료" : `잔여 ${remainingProtein}g`);
         this.updateMacroBar("carbs", consumedCarbsG, targetCarbsG, `${Math.round((consumedCarbsG / Math.max(1, targetCarbsG)) * 100)}%`);
         this.updateMacroBar("fat", consumedFatG, targetFatG, `${Math.round((consumedFatG / Math.max(1, targetFatG)) * 100)}%`);
 
@@ -437,7 +479,7 @@ class GymRatApp {
                         <span class="routine-badge text-lime">${opt.badgeText}</span>
                     </div>
                     <button type="button" class="btn-routine-action ${selected ? "active-lime" : ""}">
-                        ${selected ? "선택됨 ✓" : "가이드 적용"}
+                        ${selected ? "선택됨" : "가이드 적용"}
                     </button>
                 </div>
             `;
@@ -476,7 +518,7 @@ class GymRatApp {
 
         const workoutListEl = document.getElementById("workout-sets-list");
         if (workouts.length === 0) {
-            workoutListEl.innerHTML = `<p class="empty-hint">오늘 기록된 웨이트 세트가 없습니다. 우측 상단 [+ 세트 기록]을 눌러 추가하세요.</p>`;
+            workoutListEl.innerHTML = `<p class="empty-hint">오늘 기록된 웨이트 세트가 없습니다. 우측 상단 [세트 기록 추가]를 눌러 기록하세요.</p>`;
         } else {
             workoutListEl.innerHTML = workouts
                 .map(
@@ -486,7 +528,7 @@ class GymRatApp {
                         <strong>[${w.targetMuscleGroup}] ${w.exerciseName} · ${w.setNumber}세트</strong>
                         <span>중량 ${w.weightKg}kg × ${w.reps}회 (볼륨 ${Math.round(w.weightKg * w.reps)}kg)</span>
                     </div>
-                    <button type="button" class="btn-icon-delete" data-delete-workout="${w.id}" title="삭제">✕</button>
+                    <button type="button" class="btn-text-delete" data-delete-workout="${w.id}">삭제</button>
                 </div>
             `
                 )
@@ -514,7 +556,7 @@ class GymRatApp {
         if (!card || !btn) return;
         if (isRegistered) {
             card.classList.add("registered");
-            btn.textContent = "등록됨 ✓";
+            btn.textContent = "등록됨";
             btn.classList.add("active");
         } else {
             card.classList.remove("registered");
@@ -528,12 +570,14 @@ class GymRatApp {
         const allRecords = GymRatStorage.getWeightRecords();
         const plan = SafeWeightLossCalculator.calculate(profile, allRecords);
 
-        // 기간 필터링
+        // 기간 필터링 (최신 기록 날짜 기준으로 필터링하여 과거/미래 모든 기록이 정상 표시되도록 보장)
         let filtered = allRecords;
-        if (this.chartPeriodDays != null) {
-            const cutoff = new Date();
+        if (this.chartPeriodDays != null && allRecords.length > 0) {
+            const latestDateStr = allRecords[allRecords.length - 1].recordDate;
+            const [y, m, d] = latestDateStr.split("-").map(Number);
+            const cutoff = new Date(y, m - 1, d);
             cutoff.setDate(cutoff.getDate() - this.chartPeriodDays);
-            const cutoffStr = cutoff.toISOString().slice(0, 10);
+            const cutoffStr = getLocalDateString(cutoff);
             filtered = allRecords.filter(r => r.recordDate >= cutoffStr);
         }
 
@@ -541,7 +585,6 @@ class GymRatApp {
             this.selectedChartPointIndex = Math.max(0, filtered.length - 1);
         }
 
-        // 상단 요약 미니 카드
         const totalLost = Math.max(0, profile.startWeightKg - plan.currentWeightKg);
         const totalGoalSpan = Math.max(0.1, profile.startWeightKg - profile.targetWeightKg);
         const totalGoalPct = Math.min(100, Math.round((totalLost / totalGoalSpan) * 100));
@@ -552,7 +595,6 @@ class GymRatApp {
             `최종 목표(${profile.targetWeightKg}kg)까지 -${plan.totalRemainingWeightKg.toFixed(2)}kg (${totalGoalPct}%)`;
         document.getElementById("graph-header-progress-bar").style.width = `${totalGoalPct}%`;
 
-        // 탭 및 기간 버튼 활성화 표시
         document.querySelectorAll("[data-chart-tab]").forEach(btn => {
             btn.classList.toggle("active", btn.getAttribute("data-chart-tab") === this.chartMetricTab);
         });
@@ -562,7 +604,6 @@ class GymRatApp {
             btn.classList.toggle("active", active);
         });
 
-        // 선택된 포인트 툴팁 업데이트
         const selRecord = filtered[this.selectedChartPointIndex];
         if (selRecord) {
             const fatMass = selRecord.bodyFatMassKg != null
@@ -575,20 +616,20 @@ class GymRatApp {
             document.getElementById("chart-tooltip-fat").textContent = `${fatMass.toFixed(2)}kg (${Number(selRecord.bodyFatPercentage).toFixed(1)}%)`;
         }
 
-        // Canvas 그래프 렌더링
-        GymRatCharts.renderBodyCompositionChart(
-            document.getElementById("canvas-body-chart"),
-            filtered,
-            profile,
-            this.chartMetricTab,
-            this.selectedChartPointIndex,
-            newIdx => {
-                this.selectedChartPointIndex = newIdx;
-                this.renderGraphScreen();
-            }
-        );
+        if (!document.getElementById("screen-graph").classList.contains("hidden")) {
+            GymRatCharts.renderBodyCompositionChart(
+                document.getElementById("canvas-body-chart"),
+                filtered,
+                profile,
+                this.chartMetricTab,
+                this.selectedChartPointIndex,
+                newIdx => {
+                    this.selectedChartPointIndex = newIdx;
+                    this.renderGraphScreen();
+                }
+            );
+        }
 
-        // 히스토리 리스트 렌더링
         const historyEl = document.getElementById("weight-history-list");
         const reversed = [...filtered].reverse();
         historyEl.innerHTML = reversed
@@ -597,13 +638,14 @@ class GymRatApp {
                     ? Number(rec.bodyFatMassKg)
                     : SafeWeightLossCalculator.round2(rec.weightKg * (rec.bodyFatPercentage / 100));
                 const muscleOk = Number(rec.skeletalMuscleMassKg) >= Number(profile.minTargetSkeletalMuscleKg);
+                const weekNum = SafeWeightLossCalculator.calculateWeekNumber(plan.startDateStr, rec.recordDate);
                 return `
                 <div class="history-card">
                     <div class="history-info">
                         <div class="history-date-row">
-                            <strong>${rec.recordDate}</strong>
+                            <strong>[${weekNum}주차] ${rec.recordDate}</strong>
                             <span class="defense-pill ${muscleOk ? "ok" : "warn"}">
-                                ${muscleOk ? "골격근 방어 ✓" : "근손실 주의 ⚠"}
+                                ${muscleOk ? "골격근 방어" : "근손실 주의"}
                             </span>
                         </div>
                         <p class="history-metrics">
@@ -613,7 +655,7 @@ class GymRatApp {
                         </p>
                         ${rec.memo ? `<p class="history-memo">${rec.memo}</p>` : ""}
                     </div>
-                    <button type="button" class="btn-icon-delete" data-delete-weight="${rec.id}" title="기록 삭제">✕</button>
+                    <button type="button" class="btn-text-delete" data-delete-weight="${rec.id}">삭제</button>
                 </div>
             `;
             })
@@ -622,11 +664,122 @@ class GymRatApp {
         historyEl.querySelectorAll("[data-delete-weight]").forEach(btn => {
             btn.addEventListener("click", () => {
                 const id = Number(btn.getAttribute("data-delete-weight"));
-                GymRatStorage.deleteWeightRecord(id);
+                const deleted = GymRatStorage.deleteWeightRecord(id);
+                if (!deleted) {
+                    this.showToast("최소 1개의 기준 기록은 삭제할 수 없습니다.");
+                    return;
+                }
+                this.selectedChartPointIndex = null;
                 this.renderAll();
-                this.showToast("체성분 기록이 삭제되었습니다.");
+                this.showToast("선택한 날짜의 체성분 기록이 삭제되었습니다.");
             });
         });
+    }
+
+    /**
+     * '이번 주 목표까지' 클릭 시 열리는 주차별 현황, 이전 기록, 이후 예상 몸무게 모달
+     */
+    openWeeklyRoadmapModal() {
+        this.renderWeeklyRoadmapModalContent();
+        document.getElementById("modal-weekly-roadmap").classList.remove("hidden");
+    }
+
+    renderWeeklyRoadmapModalContent() {
+        const profile = GymRatStorage.getProfile();
+        const records = GymRatStorage.getWeightRecords();
+        const plan = SafeWeightLossCalculator.calculate(profile, records);
+
+        document.getElementById("roadmap-modal-title").textContent =
+            `현재 ${plan.currentWeekNumber}주차 감량 현황 및 로드맵`;
+        document.getElementById("roadmap-modal-subtitle").textContent =
+            `시작일(${plan.startDateStr}) 기준 총 ${records.length}회 측정 기록과 이후 목표(${plan.targetWeightKg.toFixed(1)}kg) 도달 예상 몸무게입니다.`;
+
+        const bannerEl = document.getElementById("roadmap-current-week-banner");
+        bannerEl.innerHTML = `
+            <div style="display: flex; justify-content: space-between; align-items: center;">
+                <strong class="text-lime" style="font-size: 13.5px;">현재 ${plan.currentWeekNumber}주차 목표 요약</strong>
+                <span style="font-size: 11.5px; color: var(--text-secondary);">주간 권장 감량: -${plan.weeklyTargetLossKg.toFixed(2)}kg</span>
+            </div>
+            <div class="roadmap-summary-grid">
+                <div>
+                    <span>이번 주 시작</span>
+                    <strong>${plan.thisWeekStartWeightKg.toFixed(2)}kg</strong>
+                </div>
+                <div>
+                    <span>현재 몸무게</span>
+                    <strong class="text-blue">${plan.currentWeightKg.toFixed(2)}kg</strong>
+                </div>
+                <div>
+                    <span>이번 주 목표</span>
+                    <strong class="text-lime">${plan.thisWeekTargetWeightKg.toFixed(2)}kg</strong>
+                </div>
+            </div>
+        `;
+
+        const tabPastBtn = document.getElementById("tab-btn-roadmap-past");
+        const tabFutureBtn = document.getElementById("tab-btn-roadmap-future");
+        const panelPast = document.getElementById("panel-roadmap-past");
+        const panelFuture = document.getElementById("panel-roadmap-future");
+
+        if (this.roadmapSubTab === "past") {
+            tabPastBtn.classList.add("active");
+            tabFutureBtn.classList.remove("active");
+            panelPast.classList.remove("hidden");
+            panelFuture.classList.add("hidden");
+        } else {
+            tabPastBtn.classList.remove("active");
+            tabFutureBtn.classList.add("active");
+            panelPast.classList.add("hidden");
+            panelFuture.classList.remove("hidden");
+        }
+
+        // 1) 이전 측정 기록 렌더링
+        const pastRowsEl = document.getElementById("roadmap-past-rows");
+        pastRowsEl.innerHTML = plan.pastRecordsWithMeta
+            .map((rec, idx) => {
+                const deltaSign = rec.deltaWeightKg > 0 ? `+${rec.deltaWeightKg.toFixed(2)}` : rec.deltaWeightKg.toFixed(2);
+                const isLatest = idx === 0;
+                return `
+                <div class="roadmap-row ${isLatest ? "current-week-highlight" : ""}">
+                    <div>
+                        <strong>${rec.weekNumber}주차 ${isLatest ? "(현재)" : ""}</strong>
+                        <span class="roadmap-sub">${rec.recordDate}</span>
+                    </div>
+                    <div>
+                        <strong>${rec.weightKg.toFixed(2)} kg</strong>
+                        <span class="roadmap-sub">${deltaSign} kg</span>
+                    </div>
+                    <div>
+                        <strong>골격근 ${rec.skeletalMuscleMassKg.toFixed(2)}kg</strong>
+                        <span class="roadmap-sub">체지방 ${rec.bodyFatMassKg.toFixed(2)}kg (${rec.bodyFatPercentage.toFixed(1)}%)</span>
+                    </div>
+                </div>
+            `;
+            })
+            .join("");
+
+        // 2) 이후 주차별 예상 몸무게 시뮬레이션 렌더링
+        const futureRowsEl = document.getElementById("roadmap-future-rows");
+        futureRowsEl.innerHTML = plan.futureWeeklyRoadmap
+            .map(step => {
+                return `
+                <div class="roadmap-row ${step.isCurrentWeek ? "current-week-highlight" : ""}">
+                    <div>
+                        <strong>${step.weekNumber}주차 ${step.isCurrentWeek ? "(이번 주)" : "예상"}</strong>
+                        <span class="roadmap-sub">${step.dateRangeText}</span>
+                    </div>
+                    <div>
+                        <strong class="text-warning">-${step.weeklyLossKg.toFixed(2)} kg</strong>
+                        <span class="roadmap-sub">안전 감량폭</span>
+                    </div>
+                    <div>
+                        <strong class="text-lime">${step.expectedWeightKg.toFixed(2)} kg</strong>
+                        <span class="roadmap-sub">예상 체지방률 ${step.expectedFatPercent.toFixed(1)}%</span>
+                    </div>
+                </div>
+            `;
+            })
+            .join("");
     }
 
     openBodyRecordModal() {
@@ -634,37 +787,52 @@ class GymRatApp {
         const records = GymRatStorage.getWeightRecords();
         const plan = SafeWeightLossCalculator.calculate(profile, records);
 
+        this.todayStr = getLocalDateString();
         document.getElementById("input-body-date").value = this.todayStr;
         document.getElementById("input-body-weight").value = plan.currentWeightKg.toFixed(2);
         document.getElementById("input-body-muscle").value = plan.currentMuscleKg.toFixed(2);
         document.getElementById("input-body-fat-mass").value = plan.currentFatMassKg.toFixed(2);
         document.getElementById("input-body-fat-pct").value = plan.currentFatPercent.toFixed(1);
-        document.getElementById("input-body-memo").value = "";
+
+        const todayExisting = records.find(r => r.recordDate === this.todayStr);
+        document.getElementById("input-body-memo").value = todayExisting ? (todayExisting.memo || "") : "";
 
         document.getElementById("modal-body-record").classList.remove("hidden");
     }
 
     handleSaveBodyRecord() {
-        const recordDate = document.getElementById("input-body-date").value || this.todayStr;
-        const weightKg = parseFloat(document.getElementById("input-body-weight").value) || 104.4;
-        const skeletalMuscleMassKg = parseFloat(document.getElementById("input-body-muscle").value) || 42.8;
-        const bodyFatMassKg = parseFloat(document.getElementById("input-body-fat-mass").value) || 29.86;
-        const bodyFatPercentage = parseFloat(document.getElementById("input-body-fat-pct").value) || 28.6;
+        const recordDate = document.getElementById("input-body-date").value || getLocalDateString();
+        const weightKg = parseFloat(document.getElementById("input-body-weight").value);
+        const skeletalMuscleMassKg = parseFloat(document.getElementById("input-body-muscle").value);
+        let bodyFatMassKg = parseFloat(document.getElementById("input-body-fat-mass").value);
+        let bodyFatPercentage = parseFloat(document.getElementById("input-body-fat-pct").value);
         const memo = document.getElementById("input-body-memo").value.trim();
 
-        GymRatStorage.upsertWeightRecord({
+        if (isNaN(weightKg) || weightKg <= 0 || isNaN(skeletalMuscleMassKg) || skeletalMuscleMassKg <= 0) {
+            this.showToast("몸무게와 골격근량을 올바르게 입력해주세요.");
+            return;
+        }
+
+        if (isNaN(bodyFatPercentage) && !isNaN(bodyFatMassKg)) {
+            bodyFatPercentage = SafeWeightLossCalculator.round1((bodyFatMassKg / weightKg) * 100);
+        } else if (isNaN(bodyFatMassKg) && !isNaN(bodyFatPercentage)) {
+            bodyFatMassKg = SafeWeightLossCalculator.round2(weightKg * (bodyFatPercentage / 100));
+        }
+
+        const updatedList = GymRatStorage.upsertWeightRecord({
             recordDate,
             weightKg,
             skeletalMuscleMassKg,
-            bodyFatMassKg,
-            bodyFatPercentage,
+            bodyFatMassKg: isNaN(bodyFatMassKg) ? 29.86 : bodyFatMassKg,
+            bodyFatPercentage: isNaN(bodyFatPercentage) ? 28.6 : bodyFatPercentage,
             memo
         });
 
+        this.selectedChartPointIndex = updatedList.length - 1;
         this.closeAllModals();
         this.renderAll();
         this.showToast(
-            `체성분 저장 완료: ${weightKg.toFixed(2)}kg / 골격근 ${skeletalMuscleMassKg.toFixed(2)}kg / 체지방량 ${bodyFatMassKg.toFixed(2)}kg`
+            `${recordDate} 체성분 기록 반영 완료: ${weightKg.toFixed(2)}kg (총 ${updatedList.length}건 기록 보존)`
         );
     }
 
@@ -742,7 +910,7 @@ class GymRatApp {
 
         this.closeAllModals();
         this.renderDashboardScreen();
-        this.showToast(`${exerciseName} ${setNumber}세트 (${weightKg}kg × ${reps}회) 기록 완료!`);
+        this.showToast(`${exerciseName} ${setNumber}세트 (${weightKg}kg × ${reps}회) 기록 완료.`);
     }
 
     adjustTargetCalories(delta) {
