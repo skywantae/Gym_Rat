@@ -70,15 +70,300 @@
         </div>
     </section>
 
+    <!-- =================================================================
+         신규 계정용 온보딩 질문 리스트 & 논문 기반 목표 기간 설정 위저드
+         (기록이 없는 신규 계정 로그인 시 자동 실행)
+         ================================================================= -->
+    <section id="screen-onboarding-wizard" class="onboarding-wrapper hidden">
+        <div class="onboarding-container">
+            <div class="onboarding-top-bar">
+                <div>
+                    <span class="brand-badge">NEW ACCOUNT SETUP</span>
+                    <h1 class="onboarding-main-title">신규 계정 맞춤 설계 질문 리스트</h1>
+                    <p id="onboard-account-subtitle" class="onboarding-sub">
+                        입력하신 신체 스펙·목적·운동 강도·식습관을 바탕으로 최적의 목표와 추천 일수를 산출합니다.
+                    </p>
+                </div>
+                <button type="button" id="btn-onboard-logout" class="btn-logout">다른 계정으로 로그인 (로그아웃)</button>
+            </div>
+
+            <form id="form-onboarding-wizard">
+                <!-- STEP 1: 기본 신체 스펙 및 현재 체성분 -->
+                <article class="card onboarding-step-card">
+                    <div class="onboarding-step-head">
+                        <div>
+                            <span class="step-num-pill">질문 1</span>
+                            <h2 class="card-title">나이 · 성별 · 키 · 현재 체성분</h2>
+                        </div>
+                        <button type="button" id="btn-onboard-auto-estimate" class="btn-outline-lime">
+                            인바디 모름 (키·체중으로 골격근·체지방 자동 추정)
+                        </button>
+                    </div>
+                    <p class="card-subtitle" style="margin-bottom: 12px;">
+                        오늘 측정하거나 알고 계신 몸무게를 입력하세요. 인바디 수치를 모르면 우측 자동 추정 버튼을 누르면 성별·키·체중 기준으로 계산됩니다.
+                    </p>
+
+                    <div class="form-row-3">
+                        <div class="form-group">
+                            <label for="onboard-gender">성별</label>
+                            <select id="onboard-gender" class="form-input">
+                                <option value="MALE">남성</option>
+                                <option value="FEMALE">여성</option>
+                            </select>
+                        </div>
+                        <div class="form-group">
+                            <label for="onboard-age">나이 (만 나이)</label>
+                            <input type="number" id="onboard-age" class="form-input" min="14" max="90" step="1" value="32" required />
+                        </div>
+                        <div class="form-group">
+                            <label for="onboard-height">키 / 신장 (cm)</label>
+                            <input type="number" id="onboard-height" class="form-input" min="130" max="230" step="0.1" value="175" required />
+                        </div>
+                    </div>
+
+                    <div class="form-row-3">
+                        <div class="form-group">
+                            <label for="onboard-current-weight">현재 몸무게 (kg)</label>
+                            <input type="number" id="onboard-current-weight" class="form-input" min="35" max="250" step="0.1" value="82.0" required />
+                        </div>
+                        <div class="form-group">
+                            <label for="onboard-current-muscle">현재 골격근량 (kg)</label>
+                            <input type="number" id="onboard-current-muscle" class="form-input" min="12" max="80" step="0.1" value="34.5" required />
+                        </div>
+                        <div class="form-group">
+                            <label for="onboard-current-fat-pct">현재 체지방률 (%)</label>
+                            <input type="number" id="onboard-current-fat-pct" class="form-input" min="4" max="60" step="0.1" value="23.5" required />
+                        </div>
+                    </div>
+                </article>
+
+                <!-- STEP 2: 프로그램 목적 · 운동 횟수 · 운동 강도 · 직업 활동량 -->
+                <article class="card onboarding-step-card">
+                    <div class="onboarding-step-head">
+                        <div>
+                            <span class="step-num-pill">질문 2</span>
+                            <h2 class="card-title">프로그램 목적 · 운동 횟수 및 강도 · 근무 환경</h2>
+                        </div>
+                    </div>
+                    <p class="card-subtitle" style="margin-bottom: 12px;">
+                        다이어트(체지방 감량), 바디 리컴포지션(체지방 감량+근성장), 근비대(린매스업), 스트렝스 중 목적을 선택하세요.
+                    </p>
+
+                    <div class="form-group">
+                        <label for="onboard-program-goal">1순위 프로그램 목적</label>
+                        <select id="onboard-program-goal" class="form-input">
+                            <option value="DIET">다이어트 / 커팅 프로그램 (근손실 방어 + 체지방 집중 감량)</option>
+                            <option value="RECOMP">바디 리컴포지션 (체지방 감량 + 골격근 동시 개선)</option>
+                            <option value="HYPERTROPHY">근비대 프로그램 (린매스업 / 골격근량 극대화)</option>
+                            <option value="STRENGTH">스트렝스 프로그램 (3대 중량·신경계 출력 강화)</option>
+                        </select>
+                    </div>
+
+                    <div class="form-row-3">
+                        <div class="form-group">
+                            <label for="onboard-workout-days">주간 운동 횟수 (회/주)</label>
+                            <input type="number" id="onboard-workout-days" class="form-input" min="0" max="7" step="1" value="4" required />
+                        </div>
+                        <div class="form-group">
+                            <label for="onboard-workout-intensity">평소 1회 운동 강도</label>
+                            <select id="onboard-workout-intensity" class="form-input">
+                                <option value="LOW_LIGHT">저강도 (가벼운 유산소·스트레칭 위주, 30~40분)</option>
+                                <option value="MODERATE_HYPERTROPHY" selected>중강도 근비대 (대근육 머신·프리웨이트 50~60분, RPE 7~8)</option>
+                                <option value="HIGH_INTENSITY">고강도 스트렝스·고볼륨 (고중량 다관절 + 유산소 70분+, RPE 8.5~9.5)</option>
+                            </select>
+                        </div>
+                        <div class="form-group">
+                            <label for="onboard-experience">웨이트 트레이닝 경력</label>
+                            <select id="onboard-experience" class="form-input">
+                                <option value="BEGINNER">입문·초급 (1년 미만)</option>
+                                <option value="INTERMEDIATE" selected>중급자 (1년 ~ 3년)</option>
+                                <option value="ADVANCED">상급자 (3년 이상)</option>
+                            </select>
+                        </div>
+                    </div>
+
+                    <div class="form-row-3">
+                        <div class="form-group">
+                            <label for="onboard-occupation">직업군</label>
+                            <select id="onboard-occupation" class="form-input">
+                                <option value="OFFICE_IT">사무직 / IT·개발 / 기획·행정</option>
+                                <option value="RESEARCH_EDU">연구·전문직 / 교사·강사 / 상담</option>
+                                <option value="SALES_SERVICE_MED">영업·매장관리 / 서비스직 / 의료·간호</option>
+                                <option value="FIELD_TECH_CHEF">현장 기술·엔지니어 / 제조·정비 / 조리</option>
+                                <option value="HEAVY_LABOR_ATHLETE">건설·물류·배송 / 트레이너 / 고강도 현장직</option>
+                            </select>
+                        </div>
+                        <div class="form-group">
+                            <label for="onboard-posture">주된 근무 형태</label>
+                            <select id="onboard-posture" class="form-input">
+                                <option value="MOSTLY_SITTING">주로 앉아서 근무 (좌식 80%+)</option>
+                                <option value="MIXED_SIT_STAND">앉기와 서서 근무 병행 (50:50)</option>
+                                <option value="MOSTLY_STANDING">주로 서서 근무 (입식 70%+)</option>
+                                <option value="ACTIVE_WALKING">지속 보행·이동·운반</option>
+                            </select>
+                        </div>
+                        <div class="form-group">
+                            <label for="onboard-work-hours">하루 근무 시간 (시간)</label>
+                            <input type="number" id="onboard-work-hours" class="form-input" min="0" max="18" step="0.5" value="8" required />
+                        </div>
+                    </div>
+                </article>
+
+                <!-- STEP 3: 평소 식습관 조사 -->
+                <article class="card onboarding-step-card">
+                    <div class="onboarding-step-head">
+                        <div>
+                            <span class="step-num-pill">질문 3</span>
+                            <h2 class="card-title">평소 식습관 (아침 · 점심 · 고정 음료)</h2>
+                        </div>
+                    </div>
+                    <p class="card-subtitle" style="margin-bottom: 12px;">
+                        평소 자주 드시는 아침과 점심, 커피 습관을 선택하면 일일 목표 칼로리 안에서 저녁에 얼마나 더 먹을 수 있는지 자동 계산해 줍니다.
+                    </p>
+
+                    <div class="form-row-3">
+                        <div class="form-group">
+                            <label for="onboard-habit-breakfast">평소 아침 식사</label>
+                            <select id="onboard-habit-breakfast" class="form-input"></select>
+                        </div>
+                        <div class="form-group">
+                            <label for="onboard-habit-lunch">평소 점심 주메뉴</label>
+                            <select id="onboard-habit-lunch" class="form-input"></select>
+                        </div>
+                        <div class="form-group">
+                            <label for="onboard-habit-drink">평소 고정 커피·음료</label>
+                            <select id="onboard-habit-drink" class="form-input"></select>
+                        </div>
+                    </div>
+                </article>
+
+                <!-- STEP 4: 목표 설정 & 기간 앞당기기/늘리기 + 학술 논문 근거 장단점 시뮬레이터 -->
+                <article class="card onboarding-step-card onboarding-highlight-card">
+                    <div class="onboarding-step-head">
+                        <div>
+                            <span class="step-num-pill">질문 4 · 핵심 설계</span>
+                            <h2 class="card-title">추천 목표 및 도달 일수 설정 (앞당기기 / 늘리기 논문 분석)</h2>
+                        </div>
+                        <button type="button" id="btn-onboard-recommend-targets" class="btn-outline-lime">
+                            추천 목표 수치로 초기화
+                        </button>
+                    </div>
+                    <p class="card-subtitle" style="margin-bottom: 12px;">
+                        위 질문 응답을 바탕으로 안정적인 도달 목표와 <b>추천 소요 일수</b>를 계산했습니다. 목표 체중이나 <b>목표 도달 일수를 앞당기거나 늘리면</b> 대규모 표본 및 다수 인용 논문을 근거로 장단점이 실시간 분석됩니다.
+                    </p>
+
+                    <div class="form-row-3">
+                        <div class="form-group">
+                            <label for="onboard-target-weight">목표 몸무게 (kg)</label>
+                            <input type="number" id="onboard-target-weight" class="form-input" min="35" max="220" step="0.1" value="75.0" required />
+                        </div>
+                        <div class="form-group">
+                            <label for="onboard-target-muscle">목표(방어) 골격근량 (kg)</label>
+                            <input type="number" id="onboard-target-muscle" class="form-input" min="12" max="80" step="0.1" value="35.0" required />
+                        </div>
+                        <div class="form-group">
+                            <label for="onboard-target-fat-pct">목표 체지방률 (%)</label>
+                            <input type="number" id="onboard-target-fat-pct" class="form-input" min="4" max="50" step="0.1" value="15.0" required />
+                        </div>
+                    </div>
+
+                    <!-- 기간(일수) 조절 컨트롤 박스 -->
+                    <div class="duration-control-box">
+                        <div class="duration-header-row">
+                            <div>
+                                <span class="duration-label">목표 도달 설정 기간</span>
+                                <div class="duration-main-numbers">
+                                    <strong id="onboard-selected-days-val" class="duration-big-num">84일 (12주)</strong>
+                                    <span id="onboard-rec-days-badge" class="rec-days-pill">권장 표준: 84일 (12주)</span>
+                                </div>
+                                <p id="onboard-delta-days-text" class="duration-delta-sub">현재 스포츠 영양학 표준 추천 일수와 동일합니다.</p>
+                            </div>
+                            <div class="duration-input-inline">
+                                <label for="onboard-duration-input">직접 입력(일)</label>
+                                <input type="number" id="onboard-duration-input" class="form-input duration-num-input" min="14" max="365" step="1" value="84" />
+                            </div>
+                        </div>
+
+                        <input
+                            type="range"
+                            id="onboard-duration-slider"
+                            class="duration-range-slider"
+                            min="14"
+                            max="365"
+                            step="1"
+                            value="84"
+                        />
+
+                        <div class="duration-quick-btns">
+                            <button type="button" id="btn-days-minus-14" class="btn-duration-step">-14일 앞당기기</button>
+                            <button type="button" id="btn-days-minus-7" class="btn-duration-step">-7일 앞당기기</button>
+                            <button type="button" id="btn-days-reset-rec" class="btn-duration-step active">논문 추천 일수로 맞춤</button>
+                            <button type="button" id="btn-days-plus-7" class="btn-duration-step">+7일 늘리기</button>
+                            <button type="button" id="btn-days-plus-14" class="btn-duration-step">+14일 늘리기</button>
+                        </div>
+                    </div>
+
+                    <!-- 실시간 계산된 일일 에너지 밸런스 & 주간 변화율 요약 그리드 -->
+                    <div class="onboard-kpi-grid">
+                        <div class="onboard-kpi-item">
+                            <span class="kpi-caption">일평균 소모량 (TDEE)</span>
+                            <strong id="onboard-kpi-tdee" class="kpi-value">2,650 kcal</strong>
+                        </div>
+                        <div class="onboard-kpi-item">
+                            <span class="kpi-caption">주간 목표 변화 속도</span>
+                            <strong id="onboard-kpi-weekly-rate" class="kpi-value text-orange">-0.58 kg/주</strong>
+                        </div>
+                        <div class="onboard-kpi-item">
+                            <span class="kpi-caption">일일 권장 섭취 칼로리</span>
+                            <strong id="onboard-kpi-target-kcal" class="kpi-value text-blue">2,080 kcal</strong>
+                        </div>
+                        <div class="onboard-kpi-item">
+                            <span class="kpi-caption">일일 필수 단백질</span>
+                            <strong id="onboard-kpi-target-protein" class="kpi-value text-lime">145 g</strong>
+                        </div>
+                    </div>
+
+                    <!-- 학술 논문 근거 기반 장단점 비교 리포트 카드 -->
+                    <div id="onboard-paper-evidence-card" class="paper-evidence-card">
+                        <div class="paper-card-header">
+                            <span id="onboard-pace-badge" class="status-badge badge-lime">권장 표준 속도</span>
+                            <h3 id="onboard-pace-title" class="paper-card-title">스포츠 영양학회 및 메타분석 논문 근거 분석</h3>
+                        </div>
+                        <p id="onboard-pace-summary" class="paper-summary-text"></p>
+
+                        <div class="paper-pros-cons-grid">
+                            <div class="paper-col paper-col-pros">
+                                <div class="paper-col-header text-lime">현재 기간 설정의 장점 (근거 논문)</div>
+                                <div id="onboard-pros-list" class="paper-items-stack"></div>
+                            </div>
+                            <div class="paper-col paper-col-cons">
+                                <div class="paper-col-header text-warning">현재 기간 설정의 단점 및 주의점 (근거 논문)</div>
+                                <div id="onboard-cons-list" class="paper-items-stack"></div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="onboarding-submit-row">
+                        <button type="submit" id="btn-onboard-submit" class="btn-landing-primary">
+                            이 설계로 내 1주차 대시보드 시작하기
+                        </button>
+                    </div>
+                </article>
+            </form>
+        </div>
+    </section>
+
     <main id="app-main" class="app-container hidden">
-        <!-- 상단 헤더 (모바일 및 폴드 와이드 반응형 최적화, 이모티콘 완전 제거) -->
+        <!-- 상단 헤더 -->
         <header class="top-header">
             <div class="brand-row">
                 <div class="brand-title">
-                    <span class="brand-badge">PRO CUTTING</span>
                     <h1>GymRat</h1>
                 </div>
-                <button type="button" id="btn-open-sync-modal" class="btn-cloud-account">클라우드 동기화</button>
+                <div class="account-actions-group">
+                    <button type="button" id="btn-open-sync-modal" class="btn-cloud-account">클라우드 동기화</button>
+                    <button type="button" id="btn-header-logout" class="btn-logout">로그아웃</button>
+                </div>
             </div>
             <div class="header-actions">
                 <button type="button" class="btn-outline-lime js-open-goal-modal">목표 설정</button>
@@ -508,7 +793,12 @@
          ================================================================= -->
     <div id="modal-goal-setting" class="modal-backdrop hidden">
         <div class="modal-card modal-card-wide modal-scrollable">
-            <h3>프로필 · 직업군 활동량 · 감량 목표 설정</h3>
+            <div class="card-header-row" style="margin-bottom: 6px;">
+                <h3>프로필 · 직업군 활동량 · 감량 목표 설정</h3>
+                <button type="button" id="btn-open-onboarding-from-goal" class="btn-outline-lime">
+                    논문 기반 목표 일수 시뮬레이터 열기
+                </button>
+            </div>
             <p class="modal-sub">성별, 신체 스펙, 하루 근무 시간 및 근무 형태(좌식/입식/직업군)를 선택하면 평균 일일 칼로리 소모량(TDEE)과 권장 섭취 칼로리가 정밀 계산됩니다.</p>
             <form id="form-goal-setting">
                 <div class="form-section-label">1. 기본 신체 프로필</div>

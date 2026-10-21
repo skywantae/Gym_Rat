@@ -144,6 +144,7 @@ export class FirebaseSyncService {
         if (currentKey) {
             GymRatStorage.saveSlotSnapshot(currentKey);
         }
+        GymRatStorage.resetToCleanUserWorkspace();
         localStorage.removeItem(ACTIVE_SYNC_KEY);
         localStorage.removeItem(ACTIVE_SYNC_NICKNAME);
         localStorage.removeItem(LAST_SYNC_TIME_KEY);
@@ -160,14 +161,15 @@ export class FirebaseSyncService {
         const prevInfo = this.getActiveSyncInfo();
         const prevSyncKey = prevInfo.syncKey;
 
-        // 다른 계정에서 전환하는 경우 이전 계정 데이터를 로컬 슬롯에 백업하고 작업 공간을 분리
+        // 다른 계정에서 전환하거나 로그아웃 후 재진입한 경우 이전 계정과 작업 공간을 완벽 분리
         if (prevSyncKey && prevSyncKey !== syncKey) {
             GymRatStorage.saveSlotSnapshot(prevSyncKey);
             GymRatStorage.resetToCleanUserWorkspace();
-            const targetSlot = GymRatStorage.getSlotSnapshot(syncKey);
-            if (targetSlot) {
-                GymRatStorage.replaceUserDataJson(targetSlot);
-            }
+        }
+
+        const targetSlot = GymRatStorage.getSlotSnapshot(syncKey);
+        if (targetSlot) {
+            GymRatStorage.replaceUserDataJson(targetSlot);
         }
 
         const docResult = await fetchFirestoreDoc(syncKey);

@@ -74,6 +74,82 @@ export const WorkPostureProfiles = {
     }
 };
 
+/**
+ * 사용자의 주요 트레이닝 프로그램 목적 정의
+ */
+export const ProgramGoalProfiles = {
+    DIET: {
+        code: "DIET",
+        label: "체지방 감량 (다이어트 프로그램)",
+        desc: "근손실을 방어하면서 체지방과 체중을 안정적으로 감량",
+        proteinPerKg: 2.1,
+        rateMultiplier: 1.0
+    },
+    RECOMP: {
+        code: "RECOMP",
+        label: "바디 리컴포지션 (체지방 감량 + 근비대 동시)",
+        desc: "완만한 에너지 적자를 유지하며 체지방 감소와 골격근 증가를 동시 달성",
+        proteinPerKg: 2.2,
+        rateMultiplier: 0.72
+    },
+    HYPERTROPHY: {
+        code: "HYPERTROPHY",
+        label: "근비대 프로그램 (골격근량 성장 최우선)",
+        desc: "고볼륨 점진적 과부하를 통해 골격근량 극대화 및 체지방률 관리",
+        proteinPerKg: 2.0,
+        rateMultiplier: 0.62
+    },
+    STRENGTH: {
+        code: "STRENGTH",
+        label: "스트렝스 프로그램 (3대 중량 및 최대 근력 향상)",
+        desc: "신경계 퍼포먼스와 1RM 중량 보존을 최우선으로 둔 완만 체급 조절",
+        proteinPerKg: 2.0,
+        rateMultiplier: 0.65
+    }
+};
+
+/**
+ * 1회 운동 세션 강도 및 볼륨 정의
+ */
+export const WorkoutIntensityProfiles = {
+    LOW_LIGHT: {
+        code: "LOW_LIGHT",
+        label: "저강도 (가벼운 기구·유산소 30~40분 / RPE 5~6)",
+        kcalPerKgSession: 3.2
+    },
+    MODERATE_HYPERTROPHY: {
+        code: "MODERATE_HYPERTROPHY",
+        label: "중강도 (표준 대근육 웨이트 50분 + 유산소 10분 / RPE 7~8)",
+        kcalPerKgSession: 4.4
+    },
+    HIGH_INTENSITY: {
+        code: "HIGH_INTENSITY",
+        label: "고강도 (고중량 다관절 웨이트 60분+ 및 인터벌 / RPE 8.5~9.5)",
+        kcalPerKgSession: 5.5
+    }
+};
+
+/**
+ * 웨이트 트레이닝 숙련도(경력) 정의
+ */
+export const TrainingExperienceProfiles = {
+    BEGINNER: {
+        code: "BEGINNER",
+        label: "입문·초급 (1년 미만 — 신경계 적응 및 초기 근성장 잠재력 높음)",
+        paceFactor: 1.05
+    },
+    INTERMEDIATE: {
+        code: "INTERMEDIATE",
+        label: "중급 (1~3년 — 체계적 주간 볼륨 및 단백질 방어 필수)",
+        paceFactor: 1.00
+    },
+    ADVANCED: {
+        code: "ADVANCED",
+        label: "상급 (3년 이상 — 근손실 민감도가 높아 보수적 감량 속도 필수)",
+        paceFactor: 0.88
+    }
+};
+
 export function getLocalDateString(dateObj = new Date()) {
     const year = dateObj.getFullYear();
     const month = String(dateObj.getMonth() + 1).padStart(2, "0");
@@ -185,6 +261,7 @@ export class SafeWeightLossCalculator {
         dailyWorkHours = 8,
         weeklyWorkDays = 5,
         weeklyWorkoutSessions = 4,
+        workoutIntensityCode = "MODERATE_HYPERTROPHY",
         recommendedDailyDeficitKcal = 850
     }) {
         const safeWeight = Math.max(35, Number(weightKg) || 104.4);
@@ -207,6 +284,7 @@ export class SafeWeightLossCalculator {
 
         const occupation = OccupationProfiles[occupationCode] || OccupationProfiles.OFFICE_IT;
         const posture = WorkPostureProfiles[workPostureCode] || WorkPostureProfiles.MOSTLY_SITTING;
+        const intensity = WorkoutIntensityProfiles[workoutIntensityCode] || WorkoutIntensityProfiles.MODERATE_HYPERTROPHY;
 
         const bmrPerHour = bmrKcal / 24;
         const effectiveWorkMets = Math.max(1.2, occupation.workMets * posture.factor);
@@ -219,8 +297,8 @@ export class SafeWeightLossCalculator {
         // 비근무 일상 활동 칼로리(출퇴근, 보행, 일상 생활 NEAT)
         const nonWorkNeatKcal = Math.round(occupation.baseNonWorkNeatKcal * (safeWeight / 80));
 
-        // 운동 소모 칼로리(웨이트 50분 + 천국의 계단 인터벌 10분 1회당 체중 비례 소모량 -> 주간 평균 일일 환산)
-        const singleWorkoutKcal = Math.round(safeWeight * 4.4);
+        // 운동 소모 칼로리(선택한 운동 강도 × 체중 비례 소모량 -> 주간 평균 일일 환산)
+        const singleWorkoutKcal = Math.round(safeWeight * intensity.kcalPerKgSession);
         const avgDailyExerciseKcal = Math.round((singleWorkoutKcal * safeWorkouts) / 7);
 
         // 음식 열효과(TEF, 약 8%)
@@ -246,6 +324,466 @@ export class SafeWeightLossCalculator {
             tefKcal,
             estimatedDailyTdeeKcal,
             recommendedIntakeKcal
+        };
+    }
+
+    /**
+     * 인바디 측정치가 없는 신규 사용자를 위해 성별·나이·키·체중 기반으로
+     * 추정 체지방률, 골격근량 및 프로그램 목적별 권장 목표치(체중·골격근·체지방률)를 산출합니다.
+     */
+    static estimateBodyComposition({
+        gender = "MALE",
+        age = 30,
+        heightCm = 175,
+        weightKg = 78,
+        programGoalType = "DIET"
+    }) {
+        const w = Math.max(35, Number(weightKg) || 78);
+        const h = Math.max(130, Number(heightCm) || 175);
+        const a = Math.max(14, Math.min(90, Number(age) || 30));
+        const hM = h / 100;
+        const bmi = w / (hM * hM);
+        const isMale = gender !== "FEMALE";
+
+        // Deurenberg & Gallagher 한국인/아시아인 체형 보정 체지방률 추정식
+        const rawFatPct = 1.20 * bmi + 0.23 * a - (isMale ? 10.8 : 0) - 5.4;
+        const estimatedFatPercent = this.round1(
+            Math.max(isMale ? 8.0 : 14.0, Math.min(isMale ? 45.0 : 50.0, rawFatPct))
+        );
+        const estimatedFatMassKg = this.round2(w * (estimatedFatPercent / 100));
+        const leanMassKg = Math.max(25, w - estimatedFatMassKg);
+        // 골격근량(SMM)은 제지방량(FFM)의 약 56~58% (남성 약 57.5%, 여성 약 54.0%)
+        const estimatedMuscleKg = this.round2(leanMassKg * (isMale ? 0.575 : 0.54));
+
+        return this.recommendTargetsFromCurrent({
+            gender,
+            weightKg: w,
+            muscleKg: estimatedMuscleKg,
+            fatPercent: estimatedFatPercent,
+            programGoalType
+        });
+    }
+
+    /**
+     * 현재 신체 수치와 프로그램 목적(DIET / RECOMP / HYPERTROPHY / STRENGTH)을 바탕으로
+     * 가장 이상적인 목표 체중, 목표 방어/도달 골격근량, 목표 체지방률을 추천합니다.
+     */
+    static recommendTargetsFromCurrent({
+        gender = "MALE",
+        weightKg,
+        currentWeightKg,
+        muscleKg,
+        currentMuscleKg,
+        fatPercent,
+        currentFatPercent,
+        programGoalType = "DIET"
+    }) {
+        const isMale = gender !== "FEMALE";
+        const w = Math.max(35, Number(currentWeightKg ?? weightKg) || 80);
+        const m = Math.max(15, Number(currentMuscleKg ?? muscleKg) || 34);
+        const fp = Math.max(6, Math.min(55, Number(currentFatPercent ?? fatPercent) || 25));
+        const currentFatMass = w * (fp / 100);
+        const ffm = Math.max(25, w - currentFatMass);
+
+        let targetFatPercent = fp;
+        let minTargetMuscleKg = m;
+        let targetWeightKg = w;
+
+        if (programGoalType === "DIET") {
+            targetFatPercent = isMale
+                ? this.round1(Math.max(14.0, Math.min(20.0, fp - 7.5)))
+                : this.round1(Math.max(20.0, Math.min(25.0, fp - 7.0)));
+            minTargetMuscleKg = this.round1(Math.max(15, m - 0.8));
+            const targetFfm = Math.max(25, ffm - 0.8);
+            targetWeightKg = this.round1(targetFfm / (1 - targetFatPercent / 100));
+            if (targetWeightKg >= w - 1.5) {
+                targetWeightKg = this.round1(Math.max(40, w - 5.0));
+            }
+        } else if (programGoalType === "RECOMP") {
+            targetFatPercent = isMale
+                ? this.round1(Math.max(13.5, fp - 4.5))
+                : this.round1(Math.max(19.5, fp - 4.5));
+            minTargetMuscleKg = this.round1(m + 1.0);
+            const targetFfm = ffm + 1.5;
+            targetWeightKg = this.round1(Math.min(w - 2.0, targetFfm / (1 - targetFatPercent / 100)));
+        } else if (programGoalType === "HYPERTROPHY") {
+            const highFatThreshold = isMale ? 23.0 : 30.0;
+            if (fp >= highFatThreshold) {
+                targetFatPercent = this.round1(fp - 5.0);
+                minTargetMuscleKg = this.round1(m + 1.2);
+                const targetFfm = ffm + 1.8;
+                targetWeightKg = this.round1(targetFfm / (1 - targetFatPercent / 100));
+            } else {
+                targetFatPercent = this.round1(Math.min(isMale ? 18.0 : 25.0, fp + 1.0));
+                minTargetMuscleKg = this.round1(m + 2.0);
+                targetWeightKg = this.round1(w + 3.0);
+            }
+        } else {
+            // STRENGTH
+            const highFatThreshold = isMale ? 24.0 : 31.0;
+            if (fp >= highFatThreshold) {
+                targetFatPercent = this.round1(fp - 5.5);
+                minTargetMuscleKg = this.round1(m + 0.5);
+                const targetFfm = ffm + 0.8;
+                targetWeightKg = this.round1(targetFfm / (1 - targetFatPercent / 100));
+            } else {
+                targetFatPercent = this.round1(fp);
+                minTargetMuscleKg = this.round1(m + 1.5);
+                targetWeightKg = this.round1(w + 2.0);
+            }
+        }
+
+        return {
+            estimatedMuscleKg: m,
+            skeletalMuscleMassKg: m,
+            estimatedFatPercent: fp,
+            bodyFatPercentage: fp,
+            estimatedFatMassKg: this.round2(currentFatMass),
+            recommendedTargetWeightKg: targetWeightKg,
+            targetWeightKg,
+            recommendedTargetMuscleKg: minTargetMuscleKg,
+            minTargetSkeletalMuscleKg: minTargetMuscleKg,
+            recommendedTargetFatPercent: targetFatPercent,
+            targetBodyFatPercent: targetFatPercent
+        };
+    }
+
+    /**
+     * 사용자의 신체 스펙, 목표 수치, 프로그램 목적, 운동 빈도·강도·숙련도 및 선택 기간(일수)을 분석하여
+     * 추천 일수, 주당 변화 속도, 일일 섭취 칼로리/단백질, 그리고 인용수 높은 국제 학술 논문 근거 장단점을 반환합니다.
+     */
+    static evaluateDurationPlan({
+        gender = "MALE",
+        age = 32,
+        heightCm = 184,
+        currentWeightKg = 104.4,
+        currentMuscleKg = 42.8,
+        currentFatPercent = 28.6,
+        targetWeightKg = 90.0,
+        minTargetMuscleKg,
+        targetMuscleKg,
+        targetFatPercent = 19.5,
+        programGoalType = "DIET",
+        weeklyWorkoutSessions = 4,
+        workoutIntensityCode = "MODERATE_HYPERTROPHY",
+        trainingExperienceCode = "INTERMEDIATE",
+        occupationCode = "OFFICE_IT",
+        workPostureCode = "MOSTLY_SITTING",
+        dailyWorkHours = 8,
+        weeklyWorkDays = 5,
+        customDurationDays = null,
+        selectedDurationDays = null
+    }) {
+        const w = Math.max(35, Number(currentWeightKg) || 80);
+        const tw = Math.max(35, Number(targetWeightKg) || 75);
+        const m = Math.max(15, Number(currentMuscleKg) || 34);
+        const tm = Math.max(15, Number(minTargetMuscleKg ?? targetMuscleKg) || 33);
+        const fp = Math.max(5, Math.min(55, Number(currentFatPercent) || 25));
+        const fatMassKg = this.round2(w * (fp / 100));
+
+        const program = ProgramGoalProfiles[programGoalType] || ProgramGoalProfiles.DIET;
+        const expProfile = TrainingExperienceProfiles[trainingExperienceCode] || TrainingExperienceProfiles.INTERMEDIATE;
+
+        const weightDiffKg = this.round2(w - tw); // 양수면 감량, 음수면 증량
+        const isWeightLoss = weightDiffKg >= 0;
+        const absWeightChangeKg = Math.max(0.5, Math.abs(weightDiffKg));
+
+        // 1. 과학적 표준 주간 변화 속도 산출
+        const baseSafeLoss = this.computeWeeklySafeLossKg(w, fp, fatMassKg, m, tm, 0);
+        let optimalWeeklyChangeKg = baseSafeLoss.weeklyTargetLossKg * program.rateMultiplier * expProfile.paceFactor;
+        if (!isWeightLoss) {
+            optimalWeeklyChangeKg = this.round2(Math.max(0.18, Math.min(0.45, w * 0.003 * expProfile.paceFactor)));
+        } else {
+            optimalWeeklyChangeKg = this.round2(Math.max(0.25, Math.min(1.05, optimalWeeklyChangeKg)));
+        }
+
+        // 2. 안정적 목표 도달 추천 일수 (7일 단위 반올림, 최소 14일 ~ 최대 364일)
+        const rawRecommendedDays = Math.round((absWeightChangeKg / optimalWeeklyChangeKg) * 7);
+        const recommendedDays = Math.max(14, Math.min(364, Math.round(rawRecommendedDays / 7) * 7 || 14));
+        const minAllowedDays = Math.max(14, Math.round(recommendedDays * 0.4));
+        const maxAllowedDays = Math.min(540, Math.max(recommendedDays + 84, Math.round(recommendedDays * 2.0)));
+
+        const effectiveCustomDays = selectedDurationDays ?? customDurationDays;
+        const selectedDays = effectiveCustomDays != null && Number(effectiveCustomDays) > 0
+            ? Math.max(7, Math.min(730, Math.round(Number(effectiveCustomDays))))
+            : recommendedDays;
+
+        const selectedWeeks = this.round1(selectedDays / 7);
+        const recommendedWeeks = this.round1(recommendedDays / 7);
+        const daysDeltaFromRecommended = selectedDays - recommendedDays; // 음수: 앞당김(단축), 양수: 늘림(연장)
+
+        // 선택된 일수 기준 주간 변화량 및 체중 대비 주간 변화율(%)
+        const absWeeklyChangeKg = this.round2((absWeightChangeKg / selectedDays) * 7);
+        const selectedWeeklyChangeKg = isWeightLoss ? -absWeeklyChangeKg : absWeeklyChangeKg;
+        const selectedWeeklyRatePct = this.round2((absWeeklyChangeKg / w) * 100);
+
+        // 일일 에너지 적자(감량) 또는 흑자(증량) kcal 계산 (체조직 1kg당 약 7,700 kcal 기준)
+        const dailyEnergyDeltaKcal = Math.round((absWeightChangeKg * 7700) / selectedDays);
+        // Alpert (2005) 인체 지방 세포 일일 최대 에너지 방출 한계 (체지방 1kg당 약 69 kcal/일)
+        const alpertMaxDailyDeficitKcal = Math.round(fatMassKg * 69);
+
+        // TDEE 산출
+        const tdeeInfo = this.computeOccupationalTdee({
+            gender,
+            age,
+            heightCm,
+            weightKg: w,
+            fatPercent: fp,
+            occupationCode,
+            workPostureCode,
+            dailyWorkHours,
+            weeklyWorkDays,
+            weeklyWorkoutSessions,
+            workoutIntensityCode,
+            recommendedDailyDeficitKcal: isWeightLoss ? dailyEnergyDeltaKcal : -dailyEnergyDeltaKcal
+        });
+
+        // 권장 일일 섭취 칼로리 및 탄/단/지 계산
+        const minSafeIntake = gender === "FEMALE" ? 1150 : 1400;
+        const rawTargetCalories = isWeightLoss
+            ? tdeeInfo.estimatedDailyTdeeKcal - dailyEnergyDeltaKcal
+            : tdeeInfo.estimatedDailyTdeeKcal + dailyEnergyDeltaKcal;
+        const recommendedDailyCalories = Math.max(minSafeIntake, Math.round(rawTargetCalories / 10) * 10);
+
+        // 단축 감량일수록 근손실 방어를 위해 단백질 계수 상향 (Morton et al., 2018; Helms et al., 2014)
+        let proteinFactor = program.proteinPerKg;
+        if (isWeightLoss && selectedWeeklyRatePct > 0.85) {
+            proteinFactor = Math.max(proteinFactor, 2.3);
+        }
+        const ffmKg = Math.max(30, w - fatMassKg);
+        const recommendedProteinG = Math.round(Math.max(w * 1.6, Math.min(w * 2.5, ffmKg * (proteinFactor + 0.35))));
+        const recommendedFatG = Math.round(Math.max(45, (recommendedDailyCalories * 0.27) / 9));
+        const remainingCarbKcal = Math.max(200, recommendedDailyCalories - (recommendedProteinG * 4 + recommendedFatG * 9));
+        const recommendedCarbsG = Math.round(remainingCarbKcal / 4);
+
+        // 예상 목표 달성 날짜
+        const targetDateObj = new Date();
+        targetDateObj.setDate(targetDateObj.getDate() + selectedDays);
+        const estimatedEndDateStr = getLocalDateString(targetDateObj);
+
+        // 3. 기간 단축(앞당김) / 표준 / 연장(늘림) 여부에 따른 학술 논문 기반 장단점 분석 생성
+        let paceStatusLabel = "";
+        let paceBadgeClass = "";
+        let paceSummaryText = "";
+        const prosList = [];
+        const consList = [];
+
+        if (!isWeightLoss) {
+            if (daysDeltaFromRecommended <= -10 || selectedWeeklyRatePct > 0.5) {
+                paceStatusLabel = `기간 단축 공격적 증량 (${Math.abs(daysDeltaFromRecommended)}일 앞당김 · 주 +${absWeeklyChangeKg}kg)`;
+                paceBadgeClass = "badge-warning";
+                paceSummaryText = `권장 기간(${recommendedDays}일)보다 ${Math.abs(daysDeltaFromRecommended)}일 앞당겨 하루 +${dailyEnergyDeltaKcal.toLocaleString()}kcal 흑자를 내는 공격적 벌크업 설정입니다.`;
+                prosList.push({
+                    title: "단기 절대 스트렝스(1RM) 및 훈련 회복력 극대화",
+                    detail: "높은 탄수화물·칼로리 잉여로 근글리코겐이 포화 상태를 유지하여 고중량 다관절 운동 수행능력이 빠르게 상승합니다.",
+                    citation: "Slater et al. (2019), Frontiers in Nutrition (인용 220+회)"
+                });
+                consList.push(
+                    {
+                        title: "골격근 합성 상한 초과로 인한 체지방 약 5배 급증",
+                        detail: "엘리트 훈련생 대상 무작위 대조 임상에서 과도한 칼로리 잉여로 기간을 앞당긴 고속 증량군은 완만 증량군과 골격근 증가량은 차이가 없었던 반면 체지방 증가량이 약 5배 더 높았습니다.",
+                        citation: "Garthe et al. (2013), European Journal of Sport Science (RCT 임상)"
+                    },
+                    {
+                        title: "근단백질 합성(MPS) 생리적 상한선 존재",
+                        detail: "49개 임상(표본 N=1,863명) 메타분석 결과 골격근 합성 속도에는 상한선이 존재하므로 초과 칼로리의 상당 부분이 피하 및 내장 지방으로 축적됩니다.",
+                        citation: "Morton et al. (2018), British Journal of Sports Medicine (N=1,863 메타분석, 인용 1,900+회)"
+                    }
+                );
+            } else if (daysDeltaFromRecommended >= 10 || selectedWeeklyRatePct < 0.22) {
+                paceStatusLabel = `기간 연장 클린 린매스업 (+${daysDeltaFromRecommended}일 늘림 · 주 +${absWeeklyChangeKg}kg)`;
+                paceBadgeClass = "badge-blue";
+                paceSummaryText = `권장 기간(${recommendedDays}일)보다 ${daysDeltaFromRecommended}일 여유 있게 늘려 하루 +${dailyEnergyDeltaKcal.toLocaleString()}kcal 수준의 정밀 흑자를 유지하는 린매스업 설정입니다.`;
+                prosList.push({
+                    title: "체지방 축적 억제 및 순수 골격근(FFM) 증가 비율 극대화",
+                    detail: "일일 +200~300kcal 수준의 정밀 흑자 구간으로, 추후 별도의 커팅(다이어트) 기간을 최소화하면서 순수 근육량만 점진적으로 늘리기에 가장 이상적입니다.",
+                    citation: "Garthe et al. (2013, EJSS) & Slater et al. (2019, Frontiers in Nutrition)"
+                });
+                consList.push({
+                    title: "목표 체중 도달 기간 연장 및 일일 활동량 오차 민감도",
+                    detail: "하루 흑자 폭이 작기 때문에 유산소나 현장 근무 활동량이 급증한 날에는 유지 칼로리와 비슷해져 체중 증가 속도가 더딜 수 있습니다.",
+                    citation: "Helms et al. (2019), Muscle & Strength Pyramid Nutrition"
+                });
+            } else {
+                paceStatusLabel = `스포츠 영양학 표준 근비대·증량 속도 (권장 ${recommendedDays}일 기준)`;
+                paceBadgeClass = "badge-lime";
+                paceSummaryText = `골격근 합성에 필요한 최적 에너지 흑자(+${dailyEnergyDeltaKcal.toLocaleString()}kcal/일)와 체지방 제어 균형이 가장 뛰어난 표준 기간입니다.`;
+                prosList.push({
+                    title: "근단백질 합성 극대화 및 체지방 상승 최소화 균형",
+                    detail: "최적 단백질(체중 kg당 1.6~2.2g)과 소폭의 에너지 흑자가 결합되어 체지방 축적 없이 근비대 효율을 극대화합니다.",
+                    citation: "Morton et al. (2018), British Journal of Sports Medicine (49개 임상·N=1,863 메타분석)"
+                });
+                consList.push({
+                    title: "점진적 과부하(중량·볼륨) 모니터링 필수",
+                    detail: "단기 급속 벌크업에 비해 체중계 수치 변화가 완만하므로 매주 훈련 중량과 반복수 증가를 함께 추적해야 합니다.",
+                    citation: "Schoenfeld et al. (2017), Journal of Strength and Conditioning Research (메타분석)"
+                });
+            }
+        } else {
+            const isExtremeShort =
+                selectedWeeklyRatePct > 1.10 ||
+                dailyEnergyDeltaKcal > alpertMaxDailyDeficitKcal ||
+                selectedDays <= Math.round(recommendedDays * 0.68);
+            const isModerateShort =
+                !isExtremeShort &&
+                (daysDeltaFromRecommended <= -7 || selectedWeeklyRatePct > 0.80);
+            const isModerateLong =
+                daysDeltaFromRecommended >= 7 &&
+                daysDeltaFromRecommended <= Math.round(recommendedDays * 0.40) &&
+                selectedWeeklyRatePct >= 0.35;
+            const isExtremeLong =
+                !isModerateLong &&
+                (daysDeltaFromRecommended > Math.round(recommendedDays * 0.40) || selectedWeeklyRatePct < 0.35);
+
+            if (isExtremeShort) {
+                paceStatusLabel = `초단기 공격적 감량 (${Math.abs(daysDeltaFromRecommended)}일 앞당김 · 근손실·대사저하 고위험)`;
+                paceBadgeClass = "badge-danger";
+                paceSummaryText = `권장 기간(${recommendedDays}일)보다 ${Math.abs(daysDeltaFromRecommended)}일 앞당겨 주당 -${absWeeklyChangeKg}kg(체중의 ${selectedWeeklyRatePct}%), 하루 -${dailyEnergyDeltaKcal.toLocaleString()}kcal 적자를 요구하는 초단기 감량 설정입니다.`;
+
+                prosList.push({
+                    title: "단기 체중 감소 체감 극대화 및 일정 맞춤 도달",
+                    detail: "초기 글리코겐·수분 감소와 함께 체중계 수치가 가장 빠르게 내려가며, 단기 데드라인(촬영·계체량 등)에 맞춘 빠른 체중 도달이 가능합니다.",
+                    citation: "Longland et al. (2016), American Journal of Clinical Nutrition (N=40 무작위 대조 임상, 인용 600+회)"
+                });
+                consList.push(
+                    {
+                        title: "골격근 손실(평균 -1.03kg 추가 손실) 및 기초대사량(RMR) 급락",
+                        detail: "동일한 체중을 감량하더라도 기간을 앞당긴 급속 감량군은 점진적 감량군 대비 제지방량(골격근 포함) 손실이 평균 1.03kg 더 컸으며, 안정시 기초대사량(RMR)이 하루 평균 -70.5 kcal 더 크게 하락하여 종료 후 요요 위험이 높았습니다.",
+                        citation: "Ashtary-Larky et al. (2020), British Journal of Nutrition (18개 임상·표본 N=1,141명 메타분석)"
+                    },
+                    {
+                        title: `생리적 지방 산화 한계(${alpertMaxDailyDeficitKcal.toLocaleString()} kcal/일) 근접·초과`,
+                        detail: `인체 지방 세포 1kg이 하루에 방출할 수 있는 최대 에너지는 약 69 kcal로, 현재 체지방량(${fatMassKg}kg) 기준 일일 최대 방출 한계는 약 ${alpertMaxDailyDeficitKcal.toLocaleString()} kcal입니다. 현재 설정 적자(-${dailyEnergyDeltaKcal.toLocaleString()} kcal/일)는 부족분을 골격근 아미노산 분해로 충당할 위험이 매우 높습니다.`,
+                        citation: "Alpert S.S. (2005), Journal of Theoretical Biology (인용 350+회)"
+                    },
+                    {
+                        title: "웨이트 트레이닝에 의한 근성장 신호 완전 차단 및 스트렝스 하락",
+                        detail: "일일 칼로리 적자가 -500 kcal를 초과하면 저항성 운동을 수행해도 근비대 효과가 소실되며, 주당 1.4% 고속 감량 시 하체 근력 및 운동 퍼포먼스 저하가 나타납니다.",
+                        citation: "Murphy & Koehler (2022), Scand J Med Sci Sports (59개 임상·표본 N=1,548명 메타분석) & Garthe et al. (2011, IJSNEM)"
+                    }
+                );
+            } else if (isModerateShort) {
+                paceStatusLabel = `단기 가속 감량 (${Math.abs(daysDeltaFromRecommended)}일 앞당김 · 고단백 방어 필수)`;
+                paceBadgeClass = "badge-warning";
+                paceSummaryText = `권장 기간(${recommendedDays}일)보다 ${Math.abs(daysDeltaFromRecommended)}일 앞당겨 주당 -${absWeeklyChangeKg}kg(체중의 ${selectedWeeklyRatePct}%), 하루 -${dailyEnergyDeltaKcal.toLocaleString()}kcal 적자로 진행하는 가속 감량 설정입니다.`;
+
+                prosList.push(
+                    {
+                        title: "목표 달성 기간 단축 및 빠른 외형 변화",
+                        detail: "표준 일정보다 목표 도달일을 앞당겨 다이어트 장기화로 인한 심리적 피로(Diet Fatigue)를 줄일 수 있습니다.",
+                        citation: "Helms et al. (2014), Journal of the International Society of Sports Nutrition (인용 900+회)"
+                    },
+                    {
+                        title: `고단백(${recommendedProteinG}g/일) 및 고강도 웨이트 병행 시 단기 근손실 방어 가능`,
+                        detail: "감량 속도를 다소 높이더라도 제지방량 kg당 2.3~3.1g의 고단백 섭취와 주 3~4회 이상 대근육 저항성 훈련을 엄격히 지키면 단기 구간에서 골격근 방어가 가능합니다.",
+                        citation: "Longland et al. (2016, AJCN, N=40) & Morton et al. (2018, BJSM, N=1,863 메타분석)"
+                    }
+                );
+                consList.push(
+                    {
+                        title: "다이어트 중 동시 근성장(바디 리컴포지션) 효과 소실",
+                        detail: "완만 감량군(주당 0.7%)은 감량 중 제지방량이 +2.1% 증가한 반면 가속 감량군은 근육 증가가 멈추었으며, 일일 적자가 -500 kcal를 넘어가면 근단백질 합성률이 유의미하게 감소합니다.",
+                        citation: "Garthe et al. (2011, IJSNEM, 인용 650+회) & Murphy & Koehler (2022, N=1,548 메타분석)"
+                    },
+                    {
+                        title: "중후반부 대사 적응(Metabolic Adaptation) 및 공복감 증가",
+                        detail: "감량 기간을 앞당길수록 렙틴 호르몬 감소와 안정시 대사량 저하 폭이 커져 중후반부 정체기와 피로도가 높아질 수 있습니다.",
+                        citation: "Ashtary-Larky et al. (2020), British Journal of Nutrition (18개 임상·표본 N=1,141명 메타분석)"
+                    }
+                );
+            } else if (isModerateLong) {
+                paceStatusLabel = `완만·안정 연장 감량 (+${daysDeltaFromRecommended}일 늘림 · 리컴포지션·근성장 최적)`;
+                paceBadgeClass = "badge-blue";
+                paceSummaryText = `권장 기간(${recommendedDays}일)보다 ${daysDeltaFromRecommended}일 여유 있게 늘려 주당 -${absWeeklyChangeKg}kg(체중의 ${selectedWeeklyRatePct}%), 하루 -${dailyEnergyDeltaKcal.toLocaleString()}kcal 적자로 진행하는 리컴포지션 친화 설정입니다.`;
+
+                prosList.push(
+                    {
+                        title: "체지방 감량과 동시에 실제 골격근량 증가(바디 리컴포지션) 및 1RM 향상",
+                        detail: "기간을 여유 있게 설정한 완만 감량군은 체지방을 31% 감량하면서 동시에 제지방량(골격근)이 +2.1% 증가하고 1RM 최대 스트렝스가 유의미하게 향상되었습니다.",
+                        citation: "Garthe et al. (2011), Int J Sport Nutr Exerc Metab (인용 650+회)"
+                    },
+                    {
+                        title: "저항성 운동에 의한 근비대 신호 온전 유지",
+                        detail: "59개 임상연구(표본 N=1,548명) 메타분석에서 일일 칼로리 적자를 -300 ~ -500 kcal 이내로 완만하게 유지할 때 감량 중에도 근육량 증가가 지속됨이 입증되었습니다.",
+                        citation: "Murphy & Koehler (2022), Scand J Med Sci Sports (59개 임상·N=1,548 메타분석)"
+                    },
+                    {
+                        title: "기초대사량(RMR) 보존(+70.5 kcal/일 우위) 및 요요 방지",
+                        detail: "18개 임상(표본 N=1,141명) 메타분석 결과 완만 감량군은 급속 감량군 대비 기초대사량 하락이 현저히 적어 목표 달성 후 체중 유지 성공률이 가장 높았습니다.",
+                        citation: "Ashtary-Larky et al. (2020), British Journal of Nutrition (18개 임상·N=1,141 메타분석)"
+                    }
+                );
+                consList.push({
+                    title: `최종 목표 체중(${tw}kg) 도달까지 총 소요 일수 연장 (${selectedDays}일)`,
+                    detail: "하루 적자 폭이 완만하므로 단기간에 급격한 체중계 수치 하락을 기대할 경우 초반 체중 변화가 느리게 느껴질 수 있습니다.",
+                    citation: "Helms et al. (2014), JISSN"
+                });
+            } else if (isExtremeLong) {
+                paceStatusLabel = `장기 저속 감량 (+${daysDeltaFromRecommended}일 늘림 · 스트렝스·컨디션 유지 중심)`;
+                paceBadgeClass = "badge-blue";
+                paceSummaryText = `권장 기간(${recommendedDays}일)보다 ${daysDeltaFromRecommended}일 늘려 주당 -${absWeeklyChangeKg}kg(체중의 ${selectedWeeklyRatePct}%), 하루 -${dailyEnergyDeltaKcal.toLocaleString()}kcal의 소폭 적자를 유지하는 장기 플랜입니다.`;
+
+                prosList.push({
+                    title: "고중량 스트렝스 퍼포먼스 및 대사·호르몬 100% 보존",
+                    detail: "일일 칼로리 적자가 매우 작아 근손실이나 기초대사량 저하 위험이 사실상 없으며, 고강도 훈련 볼륨과 일상 컨디션을 평소와 동일하게 유지할 수 있습니다.",
+                    citation: "Murphy & Koehler (2022, N=1,548 메타분석) & Helms et al. (2014, JISSN)"
+                });
+                consList.push({
+                    title: `작은 칼로리 적자(-${dailyEnergyDeltaKcal.toLocaleString()} kcal/일)로 인한 식단 오차 민감도 증가`,
+                    detail: "주말 외식이나 음료 한두 잔의 칼로리 오차만으로도 일주일치 감량 적자가 상쇄되어 실제 목표 도달이 지연될 수 있습니다.",
+                    citation: "Hall et al. (2011), The Lancet (인체 에너지 동역학 모델, 인용 1,800+회)"
+                });
+            } else {
+                paceStatusLabel = `스포츠 영양학 최적 권장 속도 (${selectedDays}일 / ${selectedWeeks}주 표준 코스)`;
+                paceBadgeClass = "badge-lime";
+                paceSummaryText = `현재 체지방률(${fp}%)과 골격근량(${m}kg), 선택하신 [${program.label}] 목적을 종합했을 때 체지방 감량 속도와 근손실 방어 효율이 가장 완벽하게 균형을 이루는 표준 기간입니다.`;
+
+                prosList.push(
+                    {
+                        title: "골격근 방어와 체지방 감량 효율의 골드 스탠다드 구간",
+                        detail: "스포츠 영양학계가 권고하는 주당 체중의 0.5~0.8% 감량 구간에 정확히 부합하여 골격근과 3대 중량을 안정적으로 방어하면서 체지방만 선별 감량합니다.",
+                        citation: "Helms et al. (2014, JISSN, 인용 900+회) & Garthe et al. (2011, IJSNEM, 인용 650+회)"
+                    },
+                    {
+                        title: "대규모 표본 메타분석으로 검증된 대사 보존 및 단백질 시너지",
+                        detail: "기초대사량(RMR) 저하를 최소화하면서 고단백 식단(1.6~2.2g/kg)의 제지방 보존 효과를 100% 발휘할 수 있는 가장 신뢰도 높은 감량 속도입니다.",
+                        citation: "Ashtary-Larky et al. (2020, BJN, N=1,141 메타분석) & Morton et al. (2018, BJSM, N=1,863 메타분석)"
+                    }
+                );
+                consList.push({
+                    title: "주간 목표 단위의 일관된 루틴 유지 필요",
+                    detail: `극단적 단기 절식에 비해 매주 -${absWeeklyChangeKg}kg씩 정직하게 감량되므로 ${selectedWeeks}주 동안 꾸준한 식단·운동 기록 습관이 요구됩니다.`,
+                    citation: "Hall et al. (2011), The Lancet"
+                });
+            }
+        }
+
+        return {
+            isWeightLoss,
+            absWeightChangeKg,
+            recommendedDays,
+            recommendedWeeks,
+            minAllowedDays,
+            maxAllowedDays,
+            selectedDays,
+            selectedWeeks,
+            daysDeltaFromRecommended,
+            selectedWeeklyChangeKg,
+            selectedWeeklyRatePct,
+            dailyEnergyDeltaKcal,
+            alpertMaxDailyDeficitKcal,
+            estimatedDailyTdeeKcal: tdeeInfo.estimatedDailyTdeeKcal,
+            bmrKcal: tdeeInfo.bmrKcal,
+            recommendedDailyCalories,
+            recommendedProteinG,
+            recommendedCarbsG,
+            recommendedFatG,
+            estimatedEndDateStr,
+            paceStatusLabel,
+            paceBadgeClass,
+            paceSummaryText,
+            prosList,
+            consList
         };
     }
 
@@ -291,11 +829,8 @@ export class SafeWeightLossCalculator {
         const bmiDeltaFromPrev = this.round1(currentBmi - prevBmi);
 
         const minTargetMuscleKg = Number(profile.minTargetSkeletalMuscleKg);
-        const {
-            weeklySafeLossRatePercent,
-            weeklyTargetLossKg,
-            muscleSafetyBufferKg
-        } = this.computeWeeklySafeLossKg(
+        const targetWeightKg = Number(profile.targetWeightKg);
+        const baseCalc = this.computeWeeklySafeLossKg(
             currentWeightKg,
             currentFatPercent,
             currentFatMassKg,
@@ -303,6 +838,18 @@ export class SafeWeightLossCalculator {
             minTargetMuscleKg,
             muscleDeltaFromPrevKg
         );
+
+        let weeklyTargetLossKg = baseCalc.weeklyTargetLossKg;
+        let weeklySafeLossRatePercent = baseCalc.weeklySafeLossRatePercent;
+        const muscleSafetyBufferKg = baseCalc.muscleSafetyBufferKg;
+
+        // 사용자가 온보딩/목표 설정에서 커스텀 도달 일수(customTargetDurationDays)를 지정한 경우 반영
+        const totalDiffFromStart = Math.abs(Number(profile.startWeightKg || currentWeightKg) - targetWeightKg);
+        if (profile.customTargetDurationDays && Number(profile.customTargetDurationDays) >= 7 && totalDiffFromStart > 0.1) {
+            const customDays = Number(profile.customTargetDurationDays);
+            weeklyTargetLossKg = this.round2(Math.max(0.20, Math.min(2.20, (totalDiffFromStart / customDays) * 7)));
+            weeklySafeLossRatePercent = this.round2((weeklyTargetLossKg / Math.max(35, currentWeightKg)) * 100);
+        }
 
         // 현재 주차(시작일 기준 7일 단위)의 시작 체중 및 이번 주 남은 감량치 계산
         const currentWeekRange = this.getWeekDateRange(startDateStr, currentWeekNumber);
@@ -316,7 +863,6 @@ export class SafeWeightLossCalculator {
             thisWeekStartWeightKg = Number(recordsInThisWeek[0].weightKg);
         }
 
-        const targetWeightKg = Number(profile.targetWeightKg);
         const thisWeekTargetWeightKg = this.round2(
             Math.max(targetWeightKg, thisWeekStartWeightKg - weeklyTargetLossKg)
         );

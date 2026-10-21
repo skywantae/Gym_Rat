@@ -277,6 +277,29 @@ class GymRatApp {
             this.openCloudSyncModal();
         });
 
+        const headerLogoutBtn = document.getElementById("btn-header-logout");
+        if (headerLogoutBtn) {
+            headerLogoutBtn.addEventListener("click", () => {
+                this.handleCloudUnlink();
+            });
+        }
+
+        const onboardLogoutBtn = document.getElementById("btn-onboard-logout");
+        if (onboardLogoutBtn) {
+            onboardLogoutBtn.addEventListener("click", () => {
+                this.handleCloudUnlink();
+            });
+        }
+
+        const openOnboardFromGoalBtn = document.getElementById("btn-open-onboarding-from-goal");
+        if (openOnboardFromGoalBtn) {
+            openOnboardFromGoalBtn.addEventListener("click", () => {
+                const syncInfo = FirebaseSyncService.getActiveSyncInfo();
+                this.closeAllModals();
+                this.openOnboardingWizard(syncInfo.nickname || "");
+            });
+        }
+
         document.getElementById("btn-action-backup").addEventListener("click", () => {
             this.handleCloudBackup();
         });
@@ -288,6 +311,9 @@ class GymRatApp {
         document.getElementById("btn-sync-unlink").addEventListener("click", () => {
             this.handleCloudUnlink();
         });
+
+        // 신규 계정 온보딩 질문 리스트 & 논문 근거 목표 일수 시뮬레이터 이벤트
+        this.bindOnboardingWizardEvents();
 
         // 웨이트 세트 저장 폼 제출
         document.getElementById("form-workout-set").addEventListener("submit", e => {
@@ -1395,6 +1421,7 @@ class GymRatApp {
      */
     initLandingGate() {
         const landingGate = document.getElementById("screen-landing-gate");
+        const onboardingWizard = document.getElementById("screen-onboarding-wizard");
         const appMain = document.getElementById("app-main");
         const bottomNav = document.getElementById("app-bottom-nav");
         const idInput = document.getElementById("landing-input-id");
@@ -1402,6 +1429,7 @@ class GymRatApp {
         const statusBox = document.getElementById("landing-status-box");
 
         if (landingGate) landingGate.classList.remove("hidden");
+        if (onboardingWizard) onboardingWizard.classList.add("hidden");
         if (appMain) appMain.classList.add("hidden");
         if (bottomNav) bottomNav.classList.add("hidden");
         if (statusBox) statusBox.classList.add("hidden");
@@ -1449,15 +1477,20 @@ class GymRatApp {
         try {
             const res = await FirebaseSyncService.authenticateWithCloud(userId, pin);
             this.setLandingStatus("", "info");
-            this.enterMainDashboard();
 
-            if (res.mode === "RESTORED") {
+            const currentRecords = GymRatStorage.getWeightRecords();
+            const currentProfile = GymRatStorage.getProfile();
+
+            // 체성분 로그가 0건이고 온보딩을 완료하지 않은 신규 계정이면 맞춤 설계 질문 리스트 실행
+            if (currentRecords.length === 0 && !currentProfile.onboardingCompleted) {
+                this.openOnboardingWizard(res.nickname);
                 this.showToast(
-                    `[${res.nickname}] 로그인 완료 (저장된 체성분 기록 ${res.recordsCount}건 불러옴)`
+                    `[${res.nickname}] 신규 계정입니다. 맞춤 목표 및 추천 기간 설정 질문지를 작성해주세요.`
                 );
             } else {
+                this.enterMainDashboard();
                 this.showToast(
-                    `[${res.nickname}] 새 계정 생성 완료. [목표 설정]에서 내 스펙을 입력해주세요.`
+                    `[${res.nickname}] 로그인 완료 (저장된 체성분 기록 ${res.recordsCount}건 불러옴)`
                 );
             }
         } catch (err) {
@@ -1475,15 +1508,568 @@ class GymRatApp {
 
     enterMainDashboard() {
         const landingGate = document.getElementById("screen-landing-gate");
+        const onboardingWizard = document.getElementById("screen-onboarding-wizard");
         const appMain = document.getElementById("app-main");
         const bottomNav = document.getElementById("app-bottom-nav");
 
         if (landingGate) landingGate.classList.add("hidden");
+        if (onboardingWizard) onboardingWizard.classList.add("hidden");
         if (appMain) appMain.classList.remove("hidden");
         if (bottomNav) bottomNav.classList.remove("hidden");
 
         this.renderAll();
         window.scrollTo({ top: 0, behavior: "smooth" });
+    }
+
+    /**
+     * 신규 계정 온보딩 질문 리스트 & 논문 근거 목표 일수(앞당기기/늘리기) 시뮬레이터
+     */
+    bindOnboardingWizardEvents() {
+        const autoEstimateBtn = document.getElementById("btn-onboard-auto-estimate");
+        if (autoEstimateBtn) {
+            autoEstimateBtn.addEventListener("click", () => {
+                const gender = document.getElementById("onboard-gender").value || "MALE";
+                const age = parseInt(document.getElementById("onboard-age").value, 10) || 32;
+                const heightCm = parseFloat(document.getElementById("onboard-height").value) || 175;
+                const weightKg = parseFloat(document.getElementById("onboard-current-weight").value) || 80;
+                const est = SafeWeightLossCalculator.estimateBodyComposition({
+                    gender,
+                    age,
+                    heightCm,
+                    weightKg
+                });
+                document.getElementById("onboard-current-muscle").value = est.skeletalMuscleMassKg.toFixed(1);
+                document.getElementById("onboard-current-fat-pct").value = est.bodyFatPercentage.toFixed(1);
+                this.applyOnboardingRecommendedTargets(true);
+                this.showToast(
+                    `성별·키·체중 기반으로 추정 골격근량(${est.skeletalMuscleMassKg}kg)과 체지방률(${est.bodyFatPercentage}%)이 자동 입력되었습니다.`
+                );
+            });
+        }
+
+        const resetRecTargetsBtn = document.getElementById("btn-onboard-recommend-targets");
+        if (resetRecTargetsBtn) {
+            resetRecTargetsBtn.addEventListener("click", () => {
+                this.applyOnboardingRecommendedTargets(true);
+                this.showToast("현재 신체 스펙과 프로그램 목적에 맞는 안전 추천 목표치 및 권장 일수로 초기화되었습니다.");
+            });
+        }
+
+        // 신체 스펙 및 목적 변경 시 추천 목표치 + 권장 일수 자동 갱신
+        [
+            "onboard-gender",
+            "onboard-age",
+            "onboard-height",
+            "onboard-current-weight",
+            "onboard-current-muscle",
+            "onboard-current-fat-pct",
+            "onboard-program-goal",
+            "onboard-experience"
+        ].forEach(id => {
+            const el = document.getElementById(id);
+            if (el) {
+                el.addEventListener("change", () => this.applyOnboardingRecommendedTargets(true));
+                el.addEventListener("input", () => this.applyOnboardingRecommendedTargets(true));
+            }
+        });
+
+        // 운동 횟수·강도·직업군 변경 시 TDEE 및 시뮬레이션 실시간 갱신
+        [
+            "onboard-workout-days",
+            "onboard-workout-intensity",
+            "onboard-occupation",
+            "onboard-posture",
+            "onboard-work-hours"
+        ].forEach(id => {
+            const el = document.getElementById(id);
+            if (el) {
+                el.addEventListener("change", () => this.updateOnboardingSimulation(false));
+                el.addEventListener("input", () => this.updateOnboardingSimulation(false));
+            }
+        });
+
+        // 목표 체중·골격근·체지방률을 사용자가 직접 수정하면 해당 목표에 맞는 권장 일수로 재계산
+        [
+            "onboard-target-weight",
+            "onboard-target-muscle",
+            "onboard-target-fat-pct"
+        ].forEach(id => {
+            const el = document.getElementById(id);
+            if (el) {
+                el.addEventListener("input", () => this.updateOnboardingSimulation(true));
+                el.addEventListener("change", () => this.updateOnboardingSimulation(true));
+            }
+        });
+
+        // 기간 슬라이더 및 직접 입력 이벤트
+        const sliderEl = document.getElementById("onboard-duration-slider");
+        const numInputEl = document.getElementById("onboard-duration-input");
+
+        if (sliderEl) {
+            sliderEl.addEventListener("input", () => {
+                const days = parseInt(sliderEl.value, 10) || 56;
+                if (numInputEl) numInputEl.value = days;
+                this.updateOnboardingSimulation(false);
+            });
+        }
+
+        if (numInputEl) {
+            numInputEl.addEventListener("input", () => {
+                const raw = parseInt(numInputEl.value, 10);
+                if (!isNaN(raw)) {
+                    const clamped = Math.max(14, Math.min(365, raw));
+                    if (sliderEl) sliderEl.value = clamped;
+                    this.updateOnboardingSimulation(false);
+                }
+            });
+            numInputEl.addEventListener("change", () => {
+                const raw = parseInt(numInputEl.value, 10) || 56;
+                const clamped = Math.max(14, Math.min(365, raw));
+                numInputEl.value = clamped;
+                if (sliderEl) sliderEl.value = clamped;
+                this.updateOnboardingSimulation(false);
+            });
+        }
+
+        // 앞당기기 / 늘리기 퀵 버튼 이벤트
+        const stepDays = delta => {
+            const current = parseInt(document.getElementById("onboard-duration-input").value, 10) || this.onboardRecommendedDays || 56;
+            const next = Math.max(14, Math.min(365, current + delta));
+            document.getElementById("onboard-duration-input").value = next;
+            document.getElementById("onboard-duration-slider").value = next;
+            this.updateOnboardingSimulation(false);
+        };
+
+        const btnMinus14 = document.getElementById("btn-days-minus-14");
+        const btnMinus7 = document.getElementById("btn-days-minus-7");
+        const btnResetRec = document.getElementById("btn-days-reset-rec");
+        const btnPlus7 = document.getElementById("btn-days-plus-7");
+        const btnPlus14 = document.getElementById("btn-days-plus-14");
+
+        if (btnMinus14) btnMinus14.addEventListener("click", () => stepDays(-14));
+        if (btnMinus7) btnMinus7.addEventListener("click", () => stepDays(-7));
+        if (btnResetRec) {
+            btnResetRec.addEventListener("click", () => {
+                const rec = this.onboardRecommendedDays || 56;
+                document.getElementById("onboard-duration-input").value = rec;
+                document.getElementById("onboard-duration-slider").value = rec;
+                this.updateOnboardingSimulation(false);
+            });
+        }
+        if (btnPlus7) btnPlus7.addEventListener("click", () => stepDays(7));
+        if (btnPlus14) btnPlus14.addEventListener("click", () => stepDays(14));
+
+        const onboardForm = document.getElementById("form-onboarding-wizard");
+        if (onboardForm) {
+            onboardForm.addEventListener("submit", e => {
+                e.preventDefault();
+                this.handleCompleteOnboarding();
+            });
+        }
+    }
+
+    openOnboardingWizard(nickname = "") {
+        const landingGate = document.getElementById("screen-landing-gate");
+        const onboardingWizard = document.getElementById("screen-onboarding-wizard");
+        const appMain = document.getElementById("app-main");
+        const bottomNav = document.getElementById("app-bottom-nav");
+
+        if (landingGate) landingGate.classList.add("hidden");
+        if (appMain) appMain.classList.add("hidden");
+        if (bottomNav) bottomNav.classList.add("hidden");
+        if (onboardingWizard) onboardingWizard.classList.remove("hidden");
+
+        const subEl = document.getElementById("onboard-account-subtitle");
+        if (subEl) {
+            const label = nickname ? `[계정: ${nickname}] ` : "";
+            subEl.textContent = `${label}나이·성별·키·몸무게·목적·식습관·운동 강도를 바탕으로 안정적인 목표와 추천 일수를 산출합니다.`;
+        }
+
+        // 식습관 셀렉트 옵션 채우기
+        const bfSelect = document.getElementById("onboard-habit-breakfast");
+        const lcSelect = document.getElementById("onboard-habit-lunch");
+        const drSelect = document.getElementById("onboard-habit-drink");
+        const customRoutines = GymRatStorage.getCustomRoutines();
+
+        if (bfSelect) {
+            bfSelect.innerHTML = HabitMealCatalog.BREAKFAST_PRESETS.map(
+                p => `<option value="${p.code}">${p.label} (${p.caloriesKcal} kcal / 단백질 ${p.proteinG}g)</option>`
+            ).join("");
+            bfSelect.value =
+                customRoutines.breakfastPresetCode && customRoutines.breakfastPresetCode !== "CUSTOM"
+                    ? customRoutines.breakfastPresetCode
+                    : "BF_EGG3_APPLE1_SHAKE";
+        }
+
+        if (lcSelect) {
+            lcSelect.innerHTML = HabitMealCatalog.LUNCH_MAIN_PRESETS.map(
+                p => `<option value="${p.code}">${p.label} (${p.caloriesKcal.toLocaleString()} kcal)</option>`
+            ).join("");
+            lcSelect.value =
+                customRoutines.lunchMainPresetCode && customRoutines.lunchMainPresetCode !== "CUSTOM"
+                    ? customRoutines.lunchMainPresetCode
+                    : "LC_CAFETERIA_SEOLLEONGTANG";
+        }
+
+        if (drSelect) {
+            drSelect.innerHTML = HabitMealCatalog.FIXED_DRINK_PRESETS.map(
+                p => `<option value="${p.code}">${p.label} (${p.caloriesKcal} kcal)</option>`
+            ).join("");
+            drSelect.value =
+                customRoutines.fixedDrinkPresetCode && customRoutines.fixedDrinkPresetCode !== "CUSTOM"
+                    ? customRoutines.fixedDrinkPresetCode
+                    : "DR_GS25_BARISTA_174";
+        }
+
+        const profile = GymRatStorage.getProfile();
+        const records = GymRatStorage.getWeightRecords();
+        const latestRec = records.length > 0 ? records[records.length - 1] : null;
+
+        document.getElementById("onboard-gender").value = profile.gender || "MALE";
+        document.getElementById("onboard-age").value = profile.age || 32;
+        document.getElementById("onboard-height").value = profile.heightCm || 175;
+
+        if (latestRec) {
+            document.getElementById("onboard-current-weight").value = Number(latestRec.weightKg).toFixed(1);
+            document.getElementById("onboard-current-muscle").value = Number(latestRec.skeletalMuscleMassKg).toFixed(1);
+            document.getElementById("onboard-current-fat-pct").value = Number(latestRec.bodyFatPercentage).toFixed(1);
+        } else {
+            const defaultW = 82.0;
+            const est = SafeWeightLossCalculator.estimateBodyComposition({
+                gender: profile.gender || "MALE",
+                age: profile.age || 32,
+                heightCm: profile.heightCm || 175,
+                weightKg: defaultW
+            });
+            document.getElementById("onboard-current-weight").value = defaultW.toFixed(1);
+            document.getElementById("onboard-current-muscle").value = est.skeletalMuscleMassKg.toFixed(1);
+            document.getElementById("onboard-current-fat-pct").value = est.bodyFatPercentage.toFixed(1);
+        }
+
+        document.getElementById("onboard-program-goal").value = profile.programGoalType || "DIET";
+        document.getElementById("onboard-workout-days").value = profile.weeklyWorkoutTargetDays ?? 4;
+        document.getElementById("onboard-workout-intensity").value = profile.workoutIntensityCode || "MODERATE_HYPERTROPHY";
+        document.getElementById("onboard-experience").value = profile.trainingExperienceCode || "INTERMEDIATE";
+        document.getElementById("onboard-occupation").value = profile.occupationCode || "OFFICE_IT";
+        document.getElementById("onboard-posture").value = profile.workPostureCode || "MOSTLY_SITTING";
+        document.getElementById("onboard-work-hours").value = profile.dailyWorkHours ?? 8;
+
+        if (profile.onboardingCompleted && records.length > 0) {
+            document.getElementById("onboard-target-weight").value = Number(profile.targetWeightKg).toFixed(1);
+            document.getElementById("onboard-target-muscle").value = Number(profile.minTargetSkeletalMuscleKg).toFixed(1);
+            document.getElementById("onboard-target-fat-pct").value = Number(profile.targetBodyFatPercent).toFixed(1);
+            if (profile.customTargetDurationDays) {
+                document.getElementById("onboard-duration-input").value = profile.customTargetDurationDays;
+                document.getElementById("onboard-duration-slider").value = profile.customTargetDurationDays;
+                this.updateOnboardingSimulation(false);
+            } else {
+                this.updateOnboardingSimulation(true);
+            }
+        } else {
+            this.applyOnboardingRecommendedTargets(true);
+        }
+
+        window.scrollTo({ top: 0, behavior: "smooth" });
+    }
+
+    applyOnboardingRecommendedTargets(resetDaysToRecommended = true) {
+        const gender = document.getElementById("onboard-gender").value || "MALE";
+        const heightCm = parseFloat(document.getElementById("onboard-height").value) || 175;
+        const currentWeightKg = parseFloat(document.getElementById("onboard-current-weight").value) || 82;
+        const currentMuscleKg = parseFloat(document.getElementById("onboard-current-muscle").value) || 34.5;
+        const currentFatPercent = parseFloat(document.getElementById("onboard-current-fat-pct").value) || 23.5;
+        const programGoalType = document.getElementById("onboard-program-goal").value || "DIET";
+        const trainingExperienceCode = document.getElementById("onboard-experience").value || "INTERMEDIATE";
+
+        const recTargets = SafeWeightLossCalculator.recommendTargetsFromCurrent({
+            gender,
+            heightCm,
+            currentWeightKg,
+            currentMuscleKg,
+            currentFatPercent,
+            programGoalType,
+            trainingExperienceCode
+        });
+
+        document.getElementById("onboard-target-weight").value = recTargets.targetWeightKg.toFixed(1);
+        document.getElementById("onboard-target-muscle").value = recTargets.minTargetSkeletalMuscleKg.toFixed(1);
+        document.getElementById("onboard-target-fat-pct").value = recTargets.targetBodyFatPercent.toFixed(1);
+
+        this.updateOnboardingSimulation(resetDaysToRecommended);
+    }
+
+    updateOnboardingSimulation(resetDaysToRecommended = false) {
+        const gender = document.getElementById("onboard-gender").value || "MALE";
+        const age = parseInt(document.getElementById("onboard-age").value, 10) || 32;
+        const heightCm = parseFloat(document.getElementById("onboard-height").value) || 175;
+        const currentWeightKg = parseFloat(document.getElementById("onboard-current-weight").value) || 82;
+        const currentMuscleKg = parseFloat(document.getElementById("onboard-current-muscle").value) || 34.5;
+        const currentFatPercent = parseFloat(document.getElementById("onboard-current-fat-pct").value) || 23.5;
+
+        const programGoalType = document.getElementById("onboard-program-goal").value || "DIET";
+        const weeklyWorkoutSessions = parseInt(document.getElementById("onboard-workout-days").value, 10) || 4;
+        const workoutIntensityCode = document.getElementById("onboard-workout-intensity").value || "MODERATE_HYPERTROPHY";
+        const trainingExperienceCode = document.getElementById("onboard-experience").value || "INTERMEDIATE";
+        const occupationCode = document.getElementById("onboard-occupation").value || "OFFICE_IT";
+        const workPostureCode = document.getElementById("onboard-posture").value || "MOSTLY_SITTING";
+        const dailyWorkHours = parseFloat(document.getElementById("onboard-work-hours").value) || 8;
+
+        const targetWeightKg = parseFloat(document.getElementById("onboard-target-weight").value) || currentWeightKg;
+        const targetMuscleKg = parseFloat(document.getElementById("onboard-target-muscle").value) || currentMuscleKg;
+        const targetFatPercent = parseFloat(document.getElementById("onboard-target-fat-pct").value) || currentFatPercent;
+
+        const tdeeObj = SafeWeightLossCalculator.computeOccupationalTdee({
+            gender,
+            age,
+            heightCm,
+            weightKg: currentWeightKg,
+            fatPercent: currentFatPercent,
+            occupationCode,
+            workPostureCode,
+            dailyWorkHours,
+            weeklyWorkDays: 5,
+            weeklyWorkoutSessions,
+            workoutIntensityCode,
+            recommendedDailyDeficitKcal: 500
+        });
+
+        // 1차 호출로 권장 일수(recommendedDays) 산출
+        const initialEval = SafeWeightLossCalculator.evaluateDurationPlan({
+            gender,
+            age,
+            heightCm,
+            currentWeightKg,
+            currentMuscleKg,
+            currentFatPercent,
+            targetWeightKg,
+            targetMuscleKg,
+            targetFatPercent,
+            programGoalType,
+            workoutIntensityCode,
+            trainingExperienceCode,
+            weeklyWorkoutSessions,
+            estimatedDailyTdeeKcal: tdeeObj.estimatedDailyTdeeKcal,
+            selectedDurationDays: null
+        });
+
+        this.onboardRecommendedDays = initialEval.recommendedDays;
+
+        const sliderEl = document.getElementById("onboard-duration-slider");
+        const numInputEl = document.getElementById("onboard-duration-input");
+
+        let selectedDays = initialEval.recommendedDays;
+        if (resetDaysToRecommended) {
+            selectedDays = initialEval.recommendedDays;
+            if (sliderEl) sliderEl.value = selectedDays;
+            if (numInputEl) numInputEl.value = selectedDays;
+        } else {
+            selectedDays = parseInt(numInputEl ? numInputEl.value : sliderEl.value, 10) || initialEval.recommendedDays;
+        }
+
+        // 선택된 일수로 정밀 논문 분석 수행
+        const planEval = SafeWeightLossCalculator.evaluateDurationPlan({
+            gender,
+            age,
+            heightCm,
+            currentWeightKg,
+            currentMuscleKg,
+            currentFatPercent,
+            targetWeightKg,
+            targetMuscleKg,
+            targetFatPercent,
+            programGoalType,
+            workoutIntensityCode,
+            trainingExperienceCode,
+            weeklyWorkoutSessions,
+            estimatedDailyTdeeKcal: tdeeObj.estimatedDailyTdeeKcal,
+            selectedDurationDays: selectedDays
+        });
+
+        this.latestOnboardingEvaluation = planEval;
+
+        // UI 반영: 기간 및 추천일수 비교
+        document.getElementById("onboard-selected-days-val").textContent =
+            `${planEval.selectedDays}일 (${planEval.selectedWeeks}주)`;
+        document.getElementById("onboard-rec-days-badge").textContent =
+            `권장 표준: ${planEval.recommendedDays}일 (${planEval.recommendedWeeks}주)`;
+
+        const deltaEl = document.getElementById("onboard-delta-days-text");
+        const resetBtn = document.getElementById("btn-days-reset-rec");
+        if (planEval.daysDeltaFromRecommended < 0) {
+            deltaEl.textContent = `권장 표준 기간보다 ${Math.abs(planEval.daysDeltaFromRecommended)}일 앞당김 (기간 단축 모드 · 주당 변화량 증가)`;
+            deltaEl.className = "duration-delta-sub text-warning";
+            if (resetBtn) resetBtn.classList.remove("active");
+        } else if (planEval.daysDeltaFromRecommended > 0) {
+            deltaEl.textContent = `권장 표준 기간보다 +${planEval.daysDeltaFromRecommended}일 늘림 (기간 연장 모드 · 근손실 방어 및 식단 여유 증가)`;
+            deltaEl.className = "duration-delta-sub text-blue";
+            if (resetBtn) resetBtn.classList.remove("active");
+        } else {
+            deltaEl.textContent = "스포츠 영양학 및 임상 메타분석 기준 가장 이상적인 권장 도달 일수입니다.";
+            deltaEl.className = "duration-delta-sub text-lime";
+            if (resetBtn) resetBtn.classList.add("active");
+        }
+
+        // KPI 요약 그리드 반영
+        document.getElementById("onboard-kpi-tdee").textContent =
+            `${tdeeObj.estimatedDailyTdeeKcal.toLocaleString()} kcal`;
+        const weeklySign = planEval.selectedWeeklyChangeKg > 0 ? "+" : "";
+        document.getElementById("onboard-kpi-weekly-rate").textContent =
+            `${weeklySign}${planEval.selectedWeeklyChangeKg.toFixed(2)} kg/주`;
+        document.getElementById("onboard-kpi-target-kcal").textContent =
+            `${planEval.recommendedDailyCalories.toLocaleString()} kcal`;
+        document.getElementById("onboard-kpi-target-protein").textContent =
+            `${planEval.recommendedProteinG} g`;
+
+        // 논문 근거 배지 및 요약문 반영
+        const badgeEl = document.getElementById("onboard-pace-badge");
+        badgeEl.textContent = planEval.paceStatusLabel;
+        badgeEl.className = `status-badge ${planEval.paceBadgeClass}`;
+        document.getElementById("onboard-pace-summary").textContent = planEval.paceSummaryText;
+
+        // 장점 리스트 렌더링
+        const prosContainer = document.getElementById("onboard-pros-list");
+        prosContainer.innerHTML = planEval.prosList
+            .map(
+                item => `
+            <div class="paper-evidence-item">
+                <strong>${item.title}</strong>
+                <p>${item.detail}</p>
+                <span class="paper-citation-tag">근거 논문: ${item.citation}</span>
+            </div>
+        `
+            )
+            .join("");
+
+        // 단점 리스트 렌더링
+        const consContainer = document.getElementById("onboard-cons-list");
+        consContainer.innerHTML = planEval.consList
+            .map(
+                item => `
+            <div class="paper-evidence-item">
+                <strong>${item.title}</strong>
+                <p>${item.detail}</p>
+                <span class="paper-citation-tag">근거 논문: ${item.citation}</span>
+            </div>
+        `
+            )
+            .join("");
+    }
+
+    handleCompleteOnboarding() {
+        this.updateOnboardingSimulation(false);
+        const evalRes = this.latestOnboardingEvaluation;
+        if (!evalRes) return;
+
+        const gender = document.getElementById("onboard-gender").value || "MALE";
+        const age = parseInt(document.getElementById("onboard-age").value, 10) || 32;
+        const heightCm = parseFloat(document.getElementById("onboard-height").value) || 175;
+        const currentWeightKg = parseFloat(document.getElementById("onboard-current-weight").value) || 82;
+        const currentMuscleKg = parseFloat(document.getElementById("onboard-current-muscle").value) || 34.5;
+        const currentFatPercent = parseFloat(document.getElementById("onboard-current-fat-pct").value) || 23.5;
+
+        const programGoalType = document.getElementById("onboard-program-goal").value || "DIET";
+        const weeklyWorkoutTargetDays = parseInt(document.getElementById("onboard-workout-days").value, 10) || 4;
+        const workoutIntensityCode = document.getElementById("onboard-workout-intensity").value || "MODERATE_HYPERTROPHY";
+        const trainingExperienceCode = document.getElementById("onboard-experience").value || "INTERMEDIATE";
+        const occupationCode = document.getElementById("onboard-occupation").value || "OFFICE_IT";
+        const workPostureCode = document.getElementById("onboard-posture").value || "MOSTLY_SITTING";
+        const dailyWorkHours = parseFloat(document.getElementById("onboard-work-hours").value) || 8;
+
+        const targetWeightKg = parseFloat(document.getElementById("onboard-target-weight").value) || currentWeightKg;
+        const minTargetSkeletalMuscleKg = parseFloat(document.getElementById("onboard-target-muscle").value) || currentMuscleKg;
+        const targetBodyFatPercent = parseFloat(document.getElementById("onboard-target-fat-pct").value) || currentFatPercent;
+
+        // 1. 프로필 및 목표 저장
+        const profile = GymRatStorage.getProfile();
+        profile.gender = gender;
+        profile.age = age;
+        profile.heightCm = heightCm;
+        profile.occupationCode = occupationCode;
+        profile.workPostureCode = workPostureCode;
+        profile.dailyWorkHours = dailyWorkHours;
+        profile.weeklyWorkDays = 5;
+        profile.weeklyWorkoutTargetDays = weeklyWorkoutTargetDays;
+        profile.programGoalType = programGoalType;
+        profile.workoutIntensityCode = workoutIntensityCode;
+        profile.trainingExperienceCode = trainingExperienceCode;
+        profile.targetWeightKg = targetWeightKg;
+        profile.minTargetSkeletalMuscleKg = minTargetSkeletalMuscleKg;
+        profile.targetBodyFatPercent = targetBodyFatPercent;
+        profile.dailyTargetCalories = evalRes.recommendedDailyCalories;
+        profile.dailyTargetProteinG = evalRes.recommendedProteinG;
+        profile.customTargetDurationDays = evalRes.selectedDays;
+        profile.onboardingCompleted = true;
+        GymRatStorage.saveProfile(profile);
+
+        // 2. 평소 식습관 기반 고정 식단 루틴 자동 생성 및 저장
+        const bfCode = document.getElementById("onboard-habit-breakfast").value || "BF_EGG3_APPLE1_SHAKE";
+        const lcCode = document.getElementById("onboard-habit-lunch").value || "LC_CAFETERIA_SEOLLEONGTANG";
+        const drCode = document.getElementById("onboard-habit-drink").value || "DR_GS25_BARISTA_174";
+
+        const bfPreset = HabitMealCatalog.BREAKFAST_PRESETS.find(p => p.code === bfCode) || HabitMealCatalog.BREAKFAST_PRESETS[0];
+        const lcPreset = HabitMealCatalog.LUNCH_MAIN_PRESETS.find(p => p.code === lcCode) || HabitMealCatalog.LUNCH_MAIN_PRESETS[0];
+        const drPreset = HabitMealCatalog.FIXED_DRINK_PRESETS.find(p => p.code === drCode) || HabitMealCatalog.FIXED_DRINK_PRESETS[0];
+
+        const lcLabelShort = lcPreset.label.split("(")[0].trim();
+        const drLabelShort = drPreset.label.split("(")[0].trim();
+        const lunchCombinedKcal = lcPreset.caloriesKcal + drPreset.caloriesKcal;
+        const lunchCombinedPro = lcPreset.proteinG + drPreset.proteinG;
+        const lunchCombinedCarb = lcPreset.carbsG + drPreset.carbsG;
+        const lunchCombinedFat = lcPreset.fatG + drPreset.fatG;
+
+        GymRatStorage.saveCustomRoutines(
+            {
+                breakfastPresetCode: bfCode,
+                lunchMainPresetCode: lcCode,
+                fixedDrinkPresetCode: drCode,
+                BREAKFAST_FIXED: {
+                    templateCode: "FIXED_BREAKFAST_EGG_APPLE_SHAKE",
+                    mealType: "BREAKFAST",
+                    mealLabel: "아침",
+                    title: `아침 고정 루틴 (${bfPreset.label})`,
+                    subtitle: bfPreset.detail,
+                    badgeText: `원클릭 고정 루틴 · ${bfPreset.caloriesKcal.toLocaleString()} kcal / 단백질 ${bfPreset.proteinG}g`,
+                    caloriesKcal: bfPreset.caloriesKcal,
+                    carbsG: bfPreset.carbsG,
+                    proteinG: bfPreset.proteinG,
+                    fatG: bfPreset.fatG
+                },
+                LUNCH_FIXED: {
+                    templateCode: "FIXED_LUNCH_CAFETERIA_LATTE",
+                    mealType: "LUNCH",
+                    mealLabel: "점심",
+                    title: `점심 고정 루틴 (${lcLabelShort} + ${drLabelShort})`,
+                    subtitle: `${lcLabelShort}(약 ${lcPreset.caloriesKcal.toLocaleString()} kcal) + ${drLabelShort}(${drPreset.caloriesKcal.toLocaleString()} kcal)`,
+                    badgeText: `고정 템플릿 · ${lunchCombinedKcal.toLocaleString()} kcal / 단백질 ${lunchCombinedPro}g`,
+                    caloriesKcal: lunchCombinedKcal,
+                    carbsG: lunchCombinedCarb,
+                    proteinG: lunchCombinedPro,
+                    fatG: lunchCombinedFat
+                }
+            },
+            this.todayStr
+        );
+
+        // 3. 1일차(1주차 시작일) 초기 체성분 기록 저장 (기존 기록이 없을 때만 추가하여 기존 기록 절대 보존)
+        const existingRecords = GymRatStorage.getWeightRecords();
+        if (existingRecords.length === 0) {
+            const bodyFatMassKg = SafeWeightLossCalculator.round2(currentWeightKg * (currentFatPercent / 100));
+            GymRatStorage.saveWeightRecord({
+                recordDate: this.todayStr,
+                weightKg: currentWeightKg,
+                skeletalMuscleMassKg: currentMuscleKg,
+                bodyFatMassKg,
+                bodyFatPercentage: currentFatPercent,
+                memo: "맞춤 설계 1주차 시작 기준 기록"
+            });
+        }
+
+        // 4. 클라우드 즉시 백업 및 대시보드 진입
+        FirebaseSyncService.autoSyncIfActive();
+        this.enterMainDashboard();
+        this.showToast(
+            `맞춤 설계 완료: 목표 ${targetWeightKg}kg (${evalRes.selectedDays}일 과정 · 일일 ${evalRes.recommendedDailyCalories.toLocaleString()}kcal)`
+        );
     }
 
     /**
@@ -1577,7 +2163,10 @@ class GymRatApp {
         FirebaseSyncService.clearActiveSyncInfo();
         this.closeAllModals();
         this.initLandingGate();
-        this.showToast("아이디+PIN 접속 랜딩 화면으로 이동했습니다. 다른 아이디로 전환하거나 다시 로그인할 수 있습니다.");
+        const idInput = document.getElementById("landing-input-id");
+        if (idInput) idInput.focus();
+        window.scrollTo({ top: 0, behavior: "smooth" });
+        this.showToast("로그아웃되었습니다. 다른 아이디와 PIN 번호로 로그인할 수 있습니다.");
     }
 
     closeAllModals() {
