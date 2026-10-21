@@ -1771,6 +1771,38 @@ class GymRatApp {
         const btnPlus7 = document.getElementById("btn-days-plus-7");
         const btnPlus14 = document.getElementById("btn-days-plus-14");
 
+        const btnPaceStandard = document.getElementById("btn-pace-standard");
+        const btnPaceAccelerated = document.getElementById("btn-pace-accelerated");
+        const btnPaceGentle = document.getElementById("btn-pace-gentle");
+
+        const setPaceDays = (days) => {
+            if (!days || days <= 0) return;
+            const inputEl = document.getElementById("onboard-duration-input");
+            const sliderEl = document.getElementById("onboard-duration-slider");
+            if (inputEl) inputEl.value = days;
+            if (sliderEl) sliderEl.value = days;
+            this.updateOnboardingSimulation(false);
+        };
+
+        if (btnPaceStandard) {
+            btnPaceStandard.addEventListener("click", () => {
+                const evalObj = this.latestOnboardingEvaluation;
+                setPaceDays(evalObj ? evalObj.standardDays : this.onboardRecommendedDays);
+            });
+        }
+        if (btnPaceAccelerated) {
+            btnPaceAccelerated.addEventListener("click", () => {
+                const evalObj = this.latestOnboardingEvaluation;
+                setPaceDays(evalObj ? evalObj.acceleratedDays : Math.round((this.onboardRecommendedDays || 56) * 0.65));
+            });
+        }
+        if (btnPaceGentle) {
+            btnPaceGentle.addEventListener("click", () => {
+                const evalObj = this.latestOnboardingEvaluation;
+                setPaceDays(evalObj ? evalObj.gentleDays : Math.round((this.onboardRecommendedDays || 56) * 1.5));
+            });
+        }
+
         if (btnMinus14) btnMinus14.addEventListener("click", () => stepDays(-14));
         if (btnMinus7) btnMinus7.addEventListener("click", () => stepDays(-7));
         if (btnResetRec) {
@@ -2351,6 +2383,32 @@ class GymRatApp {
         });
 
         this.latestOnboardingEvaluation = planEval;
+
+        if (sliderEl) {
+            sliderEl.min = planEval.minAllowedDays;
+            sliderEl.max = planEval.maxAllowedDays;
+        }
+        if (numInputEl) {
+            numInputEl.min = planEval.minAllowedDays;
+            numInputEl.max = planEval.maxAllowedDays;
+        }
+
+        const btnPaceStandardEl = document.getElementById("btn-pace-standard");
+        const btnPaceAcceleratedEl = document.getElementById("btn-pace-accelerated");
+        const btnPaceGentleEl = document.getElementById("btn-pace-gentle");
+
+        if (btnPaceStandardEl) {
+            btnPaceStandardEl.classList.toggle("active", Math.abs(planEval.selectedDays - planEval.standardDays) <= 3);
+            btnPaceStandardEl.textContent = `표준 지속가능 (NCBI StatPearls · ${planEval.standardDays}일 / ${planEval.standardWeeklyRateKg}kg/주)`;
+        }
+        if (btnPaceAcceleratedEl) {
+            btnPaceAcceleratedEl.classList.toggle("active", Math.abs(planEval.selectedDays - planEval.acceleratedDays) <= 3);
+            btnPaceAcceleratedEl.textContent = `집중 가속 감량 (Purcell & ECO 임상 · ${planEval.acceleratedDays}일 / ${planEval.acceleratedWeeklyRateKg}kg/주)`;
+        }
+        if (btnPaceGentleEl) {
+            btnPaceGentleEl.classList.toggle("active", Math.abs(planEval.selectedDays - planEval.gentleDays) <= 3);
+            btnPaceGentleEl.textContent = `완만 근육방어 (Garthe & Helms · ${planEval.gentleDays}일 / ${planEval.gentleWeeklyRateKg}kg/주)`;
+        }
 
         // UI 반영: 기간 및 추천일수 비교
         document.getElementById("onboard-selected-days-val").textContent =

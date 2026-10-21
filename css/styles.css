@@ -1773,6 +1773,13 @@ body {
     height: 8px;
 }
 
+.duration-strategy-tabs {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 8px;
+    margin-bottom: 12px;
+}
+
 .duration-quick-btns {
     display: grid;
     grid-template-columns: repeat(5, minmax(0, 1fr));
@@ -1956,6 +1963,10 @@ body {
     }
 
     .paper-pros-cons-grid {
+        grid-template-columns: 1fr;
+    }
+
+    .duration-strategy-tabs {
         grid-template-columns: 1fr;
     }
 

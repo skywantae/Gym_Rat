@@ -488,24 +488,34 @@ export class SafeWeightLossCalculator {
         const isWeightLoss = weightDiffKg >= 0;
         const absWeightChangeKg = Math.max(0.5, Math.abs(weightDiffKg));
 
-        // 1. 과학적 표준 주간 변화 속도 산출 (스포츠 영양학회 ISSN 및 Garthe·Helms 메타분석 표준)
-        // - 감량: 골격근 보존 상한선인 주당 체중의 0.55%~0.75% (약 0.40~0.75kg/주)
-        // - 증량: 체지방 축적을 최소화하는 린매스업 기준 주당 체중의 0.25%~0.35% (약 0.20~0.30kg/주)
-        let optimalWeeklyChangeKg = 0.50;
+        // 1. 과학적 3대 속도 기준 산출
+        // 1) 표준 지속가능 감량: NCBI StatPearls(Management of Weight Loss Plateau) 및 Helms et al. 2014 표준 (주당 0.5kg~1.0kg, 체중의 약 0.7%)
+        // 2) 집중 가속 감량: Purcell et al. (2014, The Lancet) 및 유럽비만학회(ECO) 노르웨이 284명 RCT 임상 기준 (주당 체중의 약 1.0%, ~0.80~1.10kg/주)
+        // 3) 완만 근육방어/리컴포지션: Garthe et al. (2011, IJSNEM) 기준 (주당 체중의 약 0.45%, ~0.35~0.50kg/주)
+        let standardWeeklyRateKg = 0.55;
+        let acceleratedWeeklyRateKg = 0.85;
+        let gentleWeeklyRateKg = 0.38;
+
         if (!isWeightLoss) {
-            optimalWeeklyChangeKg = this.round2(Math.max(0.18, Math.min(0.35, w * 0.003 * expProfile.paceFactor)));
+            standardWeeklyRateKg = this.round2(Math.max(0.18, Math.min(0.35, w * 0.003 * expProfile.paceFactor)));
+            acceleratedWeeklyRateKg = this.round2(Math.max(0.30, Math.min(0.55, w * 0.005 * expProfile.paceFactor)));
+            gentleWeeklyRateKg = this.round2(Math.max(0.12, Math.min(0.22, w * 0.0018 * expProfile.paceFactor)));
         } else {
-            const baseSafeLoss = this.computeWeeklySafeLossKg(w, fp, fatMassKg, m, tm, 0);
-            const rateFromWeight = w * 0.006 * program.rateMultiplier * expProfile.paceFactor;
-            optimalWeeklyChangeKg = this.round2(Math.max(0.35, Math.min(0.85, (baseSafeLoss.weeklyTargetLossKg + rateFromWeight) / 2)));
+            standardWeeklyRateKg = this.round2(Math.max(0.50, Math.min(0.85, w * 0.007)));
+            acceleratedWeeklyRateKg = this.round2(Math.max(0.75, Math.min(1.15, w * 0.0105)));
+            gentleWeeklyRateKg = this.round2(Math.max(0.30, Math.min(0.50, w * 0.0045)));
         }
 
-        // 2. 안정적 목표 도달 추천 일수 (7일 단위 반올림, 최소 14일 ~ 최대 364일)
-        // 목표 변화량(kg) / 주간 안전 변화율(kg/주) = 필요 주수 -> 7을 곱해 일수로 산출
-        const rawRecommendedDays = Math.round((absWeightChangeKg / optimalWeeklyChangeKg) * 7);
-        const recommendedDays = Math.max(14, Math.min(364, Math.round(rawRecommendedDays / 7) * 7 || 14));
-        const minAllowedDays = Math.max(14, Math.round(recommendedDays * 0.4));
-        const maxAllowedDays = Math.min(540, Math.max(recommendedDays + 84, Math.round(recommendedDays * 2.0)));
+        const optimalWeeklyChangeKg = standardWeeklyRateKg;
+
+        // 2. 전략별 필요 일수 산출 (7일 단위 반올림, 단조 비례 정렬)
+        const standardDays = Math.max(14, Math.min(364, Math.round((absWeightChangeKg / standardWeeklyRateKg) * 7 / 7) * 7 || 14));
+        const acceleratedDays = Math.max(14, Math.min(364, Math.round((absWeightChangeKg / acceleratedWeeklyRateKg) * 7 / 7) * 7 || 14));
+        const gentleDays = Math.max(14, Math.min(364, Math.round((absWeightChangeKg / gentleWeeklyRateKg) * 7 / 7) * 7 || 14));
+
+        const recommendedDays = standardDays;
+        const minAllowedDays = Math.max(14, Math.min(acceleratedDays, Math.round(acceleratedDays * 0.8)));
+        const maxAllowedDays = Math.min(540, Math.max(gentleDays + 42, Math.round(gentleDays * 1.3)));
 
         const effectiveCustomDays = selectedDurationDays ?? customDurationDays;
         const selectedDays = effectiveCustomDays != null && Number(effectiveCustomDays) > 0
@@ -624,153 +634,131 @@ export class SafeWeightLossCalculator {
                 });
             }
         } else {
-            const isExtremeShort =
-                selectedWeeklyRatePct > 1.10 ||
-                dailyEnergyDeltaKcal > alpertMaxDailyDeficitKcal ||
-                selectedDays <= Math.round(recommendedDays * 0.68);
-            const isModerateShort =
-                !isExtremeShort &&
-                (daysDeltaFromRecommended <= -7 || selectedWeeklyRatePct > 0.80);
-            const isModerateLong =
-                daysDeltaFromRecommended >= 7 &&
-                daysDeltaFromRecommended <= Math.round(recommendedDays * 0.40) &&
-                selectedWeeklyRatePct >= 0.35;
-            const isExtremeLong =
-                !isModerateLong &&
-                (daysDeltaFromRecommended > Math.round(recommendedDays * 0.40) || selectedWeeklyRatePct < 0.35);
+            const isAccelerated =
+                selectedWeeklyRatePct >= 0.85 ||
+                selectedDays <= acceleratedDays + 4;
+            const isGentle =
+                selectedWeeklyRatePct <= 0.50 ||
+                selectedDays >= gentleDays - 4;
 
-            if (isExtremeShort) {
-                paceStatusLabel = `초단기 공격적 감량 (${Math.abs(daysDeltaFromRecommended)}일 앞당김 · 근손실·대사저하 고위험)`;
-                paceBadgeClass = "badge-danger";
-                paceSummaryText = `권장 기간(${recommendedDays}일)보다 ${Math.abs(daysDeltaFromRecommended)}일 앞당겨 주당 -${absWeeklyChangeKg}kg(체중의 ${selectedWeeklyRatePct}%), 하루 -${dailyEnergyDeltaKcal.toLocaleString()}kcal 적자를 요구하는 초단기 감량 설정입니다.`;
-
-                prosList.push({
-                    title: "단기 체중 감소 체감 극대화 및 일정 맞춤 도달",
-                    detail: "초기 글리코겐·수분 감소와 함께 체중계 수치가 가장 빠르게 내려가며, 단기 데드라인(촬영·계체량 등)에 맞춘 빠른 체중 도달이 가능합니다.",
-                    citation: "Longland et al. (2016), American Journal of Clinical Nutrition (N=40 무작위 대조 임상, 인용 600+회)"
-                });
-                consList.push(
-                    {
-                        title: "골격근 손실(평균 -1.03kg 추가 손실) 및 기초대사량(RMR) 급락",
-                        detail: "동일한 체중을 감량하더라도 기간을 앞당긴 급속 감량군은 점진적 감량군 대비 제지방량(골격근 포함) 손실이 평균 1.03kg 더 컸으며, 안정시 기초대사량(RMR)이 하루 평균 -70.5 kcal 더 크게 하락하여 종료 후 요요 위험이 높았습니다.",
-                        citation: "Ashtary-Larky et al. (2020), British Journal of Nutrition (18개 임상·표본 N=1,141명 메타분석)"
-                    },
-                    {
-                        title: `생리적 지방 산화 한계(${alpertMaxDailyDeficitKcal.toLocaleString()} kcal/일) 근접·초과`,
-                        detail: `인체 지방 세포 1kg이 하루에 방출할 수 있는 최대 에너지는 약 69 kcal로, 현재 체지방량(${fatMassKg}kg) 기준 일일 최대 방출 한계는 약 ${alpertMaxDailyDeficitKcal.toLocaleString()} kcal입니다. 현재 설정 적자(-${dailyEnergyDeltaKcal.toLocaleString()} kcal/일)는 부족분을 골격근 아미노산 분해로 충당할 위험이 매우 높습니다.`,
-                        citation: "Alpert S.S. (2005), Journal of Theoretical Biology (인용 350+회)"
-                    },
-                    {
-                        title: "웨이트 트레이닝에 의한 근성장 신호 완전 차단 및 스트렝스 하락",
-                        detail: "일일 칼로리 적자가 -500 kcal를 초과하면 저항성 운동을 수행해도 근비대 효과가 소실되며, 주당 1.4% 고속 감량 시 하체 근력 및 운동 퍼포먼스 저하가 나타납니다.",
-                        citation: "Murphy & Koehler (2022), Scand J Med Sci Sports (59개 임상·표본 N=1,548명 메타분석) & Garthe et al. (2011, IJSNEM)"
-                    }
-                );
-            } else if (isModerateShort) {
-                paceStatusLabel = `단기 가속 감량 (${Math.abs(daysDeltaFromRecommended)}일 앞당김 · 고단백 방어 필수)`;
-                paceBadgeClass = "badge-warning";
-                paceSummaryText = `권장 기간(${recommendedDays}일)보다 ${Math.abs(daysDeltaFromRecommended)}일 앞당겨 주당 -${absWeeklyChangeKg}kg(체중의 ${selectedWeeklyRatePct}%), 하루 -${dailyEnergyDeltaKcal.toLocaleString()}kcal 적자로 진행하는 가속 감량 설정입니다.`;
+            if (isAccelerated) {
+                paceStatusLabel = `집중 가속 감량 모드 (Purcell et al. 2014 & 노르웨이 ECO 284명 임상 기준)`;
+                paceBadgeClass = "badge-orange";
+                paceSummaryText = `권장 표준보다 기간을 앞당겨 주당 -${absWeeklyChangeKg}kg(체중의 ${selectedWeeklyRatePct}%), 하루 -${dailyEnergyDeltaKcal.toLocaleString()}kcal 적자로 진행하는 단기 집중 감량 설정입니다. 란셋(The Lancet, Purcell et al., 2014) 및 유럽비만학회(ECO, 노르웨이 284명 RCT) 연구에서 입증된 높은 순응도 및 신속 대사 개선 전략입니다.`;
 
                 prosList.push(
                     {
-                        title: "목표 달성 기간 단축 및 빠른 외형 변화",
-                        detail: "표준 일정보다 목표 도달일을 앞당겨 다이어트 장기화로 인한 심리적 피로(Diet Fatigue)를 줄일 수 있습니다.",
-                        citation: "Helms et al. (2014), Journal of the International Society of Sports Nutrition (인용 900+회)"
+                        title: "단기 15% 감량 목표 달성률 81% (vs 완만 감량군 50%) 및 다이어트 피로 극복",
+                        detail: "204명 대상 무작위 대조 임상(RCT)에서 12주 단기 집중 감량군은 다이어트 장기화로 인한 심리적 피로(Diet Fatigue)와 중도 탈락을 방지하여 81%가 목표 체중에 도달한 반면, 36주 완만 감량군은 50%에 그쳤습니다.",
+                        citation: "Purcell et al. (2014), The Lancet Diabetes & Endocrinology (표본 N=204 RCT, 인용 450+회)"
                     },
                     {
-                        title: `고단백(${recommendedProteinG}g/일) 및 고강도 웨이트 병행 시 단기 근손실 방어 가능`,
-                        detail: "감량 속도를 다소 높이더라도 제지방량 kg당 2.3~3.1g의 고단백 섭취와 주 3~4회 이상 대근육 저항성 훈련을 엄격히 지키면 단기 구간에서 골격근 방어가 가능합니다.",
-                        citation: "Longland et al. (2016, AJCN, N=40) & Morton et al. (2018, BJSM, N=1,863 메타분석)"
+                        title: "1년 후 건강 지표(BMI ≤ 27, 허리둘레) 달성 및 대사 질환 위험 감소 우위",
+                        detail: "비만 성인 284명을 대상으로 한 1년 추적 RCT(Treat-to-target 분석) 결과, 의학적 관리 하의 16주 급속 감량군이 완만 감량군 대비 목표 BMI 및 허리둘레 도달률이 유의미하게 높았으며 1년 후 심혈관·당뇨 위험 지표가 더 우수하게 유지되었습니다.",
+                        citation: "Line Kristin Johnson et al. (2024/2026), 유럽비만학회(ECO) 발표 · 노르웨이 베스트폴 병원 (비만 성인 N=284 RCT)"
+                    },
+                    {
+                        title: "감량 속도와 요요 현상(체중 재증가율)의 무관성 입증 (핵심은 감량 후 유지기)",
+                        detail: "144주(약 2.7년) 장기 추적 결과 감량 속도(단기 급속 vs 완만 감량)에 따른 장기 체중 재증가율(71% vs 76%)에는 통계적 차이가 없었습니다. 체중 감량 성공의 결정적 요인은 감량 속도가 아닌 '감량 종료 후 유지기(Maintenance Phase) 습관 지속'에 있습니다.",
+                        citation: "Purcell et al. (2014), The Lancet & NCBI StatPearls (Management of Weight Loss Plateau)"
                     }
                 );
                 consList.push(
                     {
-                        title: "다이어트 중 동시 근성장(바디 리컴포지션) 효과 소실",
-                        detail: "완만 감량군(주당 0.7%)은 감량 중 제지방량이 +2.1% 증가한 반면 가속 감량군은 근육 증가가 멈추었으며, 일일 적자가 -500 kcal를 넘어가면 근단백질 합성률이 유의미하게 감소합니다.",
-                        citation: "Garthe et al. (2011, IJSNEM, 인용 650+회) & Murphy & Koehler (2022, N=1,548 메타분석)"
+                        title: `고단백(${recommendedProteinG}g/일, 체중 kg당 1.6~2.2g) 및 주 3~4회 근력 운동 필수`,
+                        detail: "에너지 결핍 폭이 크므로 골격근량(제지방)을 방어하기 위해 체중 kg당 1.6~2.2g 이상의 고단백 식단과 대근육 위주 저항성 운동이 반드시 병행되어야 합니다.",
+                        citation: "NCBI StatPearls (Management of Weight Loss Plateau) & Morton et al. (2018, BJSM, N=1,863)"
                     },
                     {
-                        title: "중후반부 대사 적응(Metabolic Adaptation) 및 공복감 증가",
-                        detail: "감량 기간을 앞당길수록 렙틴 호르몬 감소와 안정시 대사량 저하 폭이 커져 중후반부 정체기와 피로도가 높아질 수 있습니다.",
-                        citation: "Ashtary-Larky et al. (2020), British Journal of Nutrition (18개 임상·표본 N=1,141명 메타분석)"
+                        title: "감량 종료 후 계획된 유지기(Maintenance Architecture) 및 리버스 다이어트 필수",
+                        detail: "감량 완료 직후 일반식으로 급격히 회귀할 경우 적응 열발생(Adaptive Thermogenesis)과 식욕 호르몬 반등으로 요요가 올 수 있으므로, 칼로리를 단계적으로 복구하는 유지기 계획이 필수입니다.",
+                        citation: "NCBI StatPearls (Weight Loss Plateau) & Hall et al. (2011, The Lancet)"
+                    },
+                    {
+                        title: "선수급 1RM 최대 근력 유지 목적 시 주의",
+                        detail: "체지방률이 이미 낮은 상태(남성 14% 이하, 여성 22% 이하)에서의 가속 감량은 지방 산화 한계(Alpert, 2005)에 의해 최대 근력(1RM) 저하가 발생할 수 있습니다.",
+                        citation: "Garthe et al. (2011, IJSNEM) & Helms et al. (2014, JISSN)"
                     }
                 );
-            } else if (isModerateLong) {
-                paceStatusLabel = `완만·안정 연장 감량 (+${daysDeltaFromRecommended}일 늘림 · 리컴포지션·근성장 최적)`;
+            } else if (isGentle) {
+                paceStatusLabel = `완만 근육방어·리컴포지션 모드 (Garthe et al. 2011 & Helms 2014)`;
                 paceBadgeClass = "badge-blue";
-                paceSummaryText = `권장 기간(${recommendedDays}일)보다 ${daysDeltaFromRecommended}일 여유 있게 늘려 주당 -${absWeeklyChangeKg}kg(체중의 ${selectedWeeklyRatePct}%), 하루 -${dailyEnergyDeltaKcal.toLocaleString()}kcal 적자로 진행하는 리컴포지션 친화 설정입니다.`;
+                paceSummaryText = `권장 기간보다 여유 있게 늘려 주당 -${absWeeklyChangeKg}kg(체중의 ${selectedWeeklyRatePct}%), 하루 -${dailyEnergyDeltaKcal.toLocaleString()}kcal의 소폭 적자로 진행하는 골격근 극대화 설정입니다.`;
 
                 prosList.push(
                     {
-                        title: "체지방 감량과 동시에 실제 골격근량 증가(바디 리컴포지션) 및 1RM 향상",
-                        detail: "기간을 여유 있게 설정한 완만 감량군은 체지방을 31% 감량하면서 동시에 제지방량(골격근)이 +2.1% 증가하고 1RM 최대 스트렝스가 유의미하게 향상되었습니다.",
+                        title: "체지방 감량과 동시에 순수 골격근 증가(+2.1%) 및 1RM 근력 향상 입증",
+                        detail: "엘리트 선수 대상 RCT에서 완만 감량군(주당 0.7% 이하)은 체지방을 31% 감량하면서 동시에 제지방량(골격근)이 +2.1% 증가하고 1RM 중량이 +11.3% 향상되었습니다.",
                         citation: "Garthe et al. (2011), Int J Sport Nutr Exerc Metab (인용 650+회)"
                     },
                     {
-                        title: "저항성 운동에 의한 근비대 신호 온전 유지",
-                        detail: "59개 임상연구(표본 N=1,548명) 메타분석에서 일일 칼로리 적자를 -300 ~ -500 kcal 이내로 완만하게 유지할 때 감량 중에도 근육량 증가가 지속됨이 입증되었습니다.",
-                        citation: "Murphy & Koehler (2022), Scand J Med Sci Sports (59개 임상·N=1,548 메타분석)"
+                        title: "운동 수행 능력 및 근비대 신호 온전 보존",
+                        detail: "일일 결핍이 -300~-500 kcal 이내로 작아 근단백질 합성(MPS) 신호가 억제되지 않으며 고중량 트레이닝 볼륨을 100% 소화할 수 있습니다.",
+                        citation: "Murphy & Koehler (2022, Scand J Med Sci Sports, N=1,548 메타분석)"
                     },
                     {
-                        title: "기초대사량(RMR) 보존(+70.5 kcal/일 우위) 및 요요 방지",
-                        detail: "18개 임상(표본 N=1,141명) 메타분석 결과 완만 감량군은 급속 감량군 대비 기초대사량 하락이 현저히 적어 목표 달성 후 체중 유지 성공률이 가장 높았습니다.",
+                        title: "기초대사량(RMR) 보존(+70.5 kcal/일 우위) 및 식단 피로 최소화",
+                        detail: "18개 임상(표본 N=1,141명) 메타분석 결과 완만 감량군은 급속 감량군 대비 기초대사량 하락이 현저히 적어 일상 식단을 편안하게 유지할 수 있습니다.",
                         citation: "Ashtary-Larky et al. (2020), British Journal of Nutrition (18개 임상·N=1,141 메타분석)"
                     }
                 );
-                consList.push({
-                    title: `최종 목표 체중(${tw}kg) 도달까지 총 소요 일수 연장 (${selectedDays}일)`,
-                    detail: "하루 적자 폭이 완만하므로 단기간에 급격한 체중계 수치 하락을 기대할 경우 초반 체중 변화가 느리게 느껴질 수 있습니다.",
-                    citation: "Helms et al. (2014), JISSN"
-                });
-            } else if (isExtremeLong) {
-                paceStatusLabel = `장기 저속 감량 (+${daysDeltaFromRecommended}일 늘림 · 스트렝스·컨디션 유지 중심)`;
-                paceBadgeClass = "badge-blue";
-                paceSummaryText = `권장 기간(${recommendedDays}일)보다 ${daysDeltaFromRecommended}일 늘려 주당 -${absWeeklyChangeKg}kg(체중의 ${selectedWeeklyRatePct}%), 하루 -${dailyEnergyDeltaKcal.toLocaleString()}kcal의 소폭 적자를 유지하는 장기 플랜입니다.`;
-
-                prosList.push({
-                    title: "고중량 스트렝스 퍼포먼스 및 대사·호르몬 100% 보존",
-                    detail: "일일 칼로리 적자가 매우 작아 근손실이나 기초대사량 저하 위험이 사실상 없으며, 고강도 훈련 볼륨과 일상 컨디션을 평소와 동일하게 유지할 수 있습니다.",
-                    citation: "Murphy & Koehler (2022, N=1,548 메타분석) & Helms et al. (2014, JISSN)"
-                });
-                consList.push({
-                    title: `작은 칼로리 적자(-${dailyEnergyDeltaKcal.toLocaleString()} kcal/일)로 인한 식단 오차 민감도 증가`,
-                    detail: "주말 외식이나 음료 한두 잔의 칼로리 오차만으로도 일주일치 감량 적자가 상쇄되어 실제 목표 도달이 지연될 수 있습니다.",
-                    citation: "Hall et al. (2011), The Lancet (인체 에너지 동역학 모델, 인용 1,800+회)"
-                });
+                consList.push(
+                    {
+                        title: `최종 목표 체중(${tw}kg) 도달까지 총 소요 일수 연장 (${selectedDays}일)`,
+                        detail: "하루 적자 폭이 완만하므로 단기간에 급격한 체중계 수치 하락을 기대할 경우 초반 체중 변화가 느리게 느껴질 수 있습니다.",
+                        citation: "Helms et al. (2014), JISSN"
+                    },
+                    {
+                        title: `작은 칼로리 적자(-${dailyEnergyDeltaKcal.toLocaleString()} kcal/일)로 인한 식단 오차 민감도 증가`,
+                        detail: "주말 외식이나 음료 한두 잔의 칼로리 오차만으로도 일주일치 감량 적자가 상쇄되어 실제 목표 도달이 지연될 수 있습니다.",
+                        citation: "Hall et al. (2011), The Lancet"
+                    }
+                );
             } else {
-                paceStatusLabel = `스포츠 영양학 최적 권장 속도 (${selectedDays}일 / ${selectedWeeks}주 표준 코스)`;
+                paceStatusLabel = `표준 지속가능 권장 모드 (NCBI StatPearls & Helms 2014 의학 표준)`;
                 paceBadgeClass = "badge-lime";
-                paceSummaryText = `현재 체지방률(${fp}%)과 골격근량(${m}kg), 선택하신 [${program.label}] 목적을 종합했을 때 체지방 감량 속도와 근손실 방어 효율이 가장 완벽하게 균형을 이루는 표준 기간입니다.`;
+                paceSummaryText = `주당 -${absWeeklyChangeKg}kg(체중의 ${selectedWeeklyRatePct}%), 하루 -${dailyEnergyDeltaKcal.toLocaleString()}kcal 적자로 진행하는 의학적 표준 권장 설정입니다. NCBI StatPearls(Management of Weight Loss Plateau)에서 제시하는 주당 0.5~1.0kg(체중의 약 0.7%) 감량 속도에 정확히 부합합니다.`;
 
                 prosList.push(
                     {
-                        title: "골격근 방어와 체지방 감량 효율의 골드 스탠다드 구간",
-                        detail: "스포츠 영양학계가 권고하는 주당 체중의 0.5~0.8% 감량 구간에 정확히 부합하여 골격근과 3대 중량을 안정적으로 방어하면서 체지방만 선별 감량합니다.",
-                        citation: "Helms et al. (2014, JISSN, 인용 900+회) & Garthe et al. (2011, IJSNEM, 인용 650+회)"
+                        title: "정체기(Weight Loss Plateau) 및 대사 저하 억제 (NCBI StatPearls 권고)",
+                        detail: "의학적으로 권고되는 주당 0.5kg~1.0kg(체중의 약 0.7%) 감량 속도로, 기초대사량(RMR) 급락과 적응 열발생을 방어하여 6~12주 차 정체기 발생 위험을 최소화합니다.",
+                        citation: "NCBI StatPearls (Management of Weight Loss Plateau, 2023/2024)"
                     },
                     {
-                        title: "대규모 표본 메타분석으로 검증된 대사 보존 및 단백질 시너지",
-                        detail: "기초대사량(RMR) 저하를 최소화하면서 고단백 식단(1.6~2.2g/kg)의 제지방 보존 효과를 100% 발휘할 수 있는 가장 신뢰도 높은 감량 속도입니다.",
-                        citation: "Ashtary-Larky et al. (2020, BJN, N=1,141 메타분석) & Morton et al. (2018, BJSM, N=1,863 메타분석)"
+                        title: "골격근 보존과 일상 지속 가능성의 황금 균형",
+                        detail: "극단적인 결핍 없이 일상 식단을 유지할 수 있어 공복 호르몬(그렐린)의 급증을 억제하고 장기적인 건강 습관 형성에 가장 안정적입니다.",
+                        citation: "Helms et al. (2014, JISSN, 인용 900+회) & Ashtary-Larky et al. (2020, BJN, N=1,141)"
+                    },
+                    {
+                        title: "체지방 선별 산화 및 단백질 절약 효과",
+                        detail: "체내 지방 저장소에서 에너지를 안정적으로 동원하여 골격근 아미노산 분해를 방어하며 3대 운동 퍼포먼스를 유지합니다.",
+                        citation: "Alpert S.S. (2005, JTB) & Morton et al. (2018, BJSM)"
                     }
                 );
                 consList.push({
-                    title: "주간 목표 단위의 일관된 루틴 유지 필요",
-                    detail: `극단적 단기 절식에 비해 매주 -${absWeeklyChangeKg}kg씩 정직하게 감량되므로 ${selectedWeeks}주 동안 꾸준한 식단·운동 기록 습관이 요구됩니다.`,
-                    citation: "Hall et al. (2011), The Lancet"
+                    title: "주간 단위의 일관된 루틴 준수 필요",
+                    detail: `점진적으로 체중이 감량되므로 목표 달성까지 ${selectedWeeks}주 동안 매주 꾸준한 기록과 규칙적인 식단 준수가 요구됩니다.`,
+                    citation: "Hall & Kahan (2018), Medical Clinics of North America"
                 });
             }
         }
 
-        const formulaText = `목표 변화량 ${absWeightChangeKg.toFixed(1)}kg ÷ 권장 주간 변화율 ${optimalWeeklyChangeKg.toFixed(2)}kg/주 = 약 ${recommendedWeeks}주 (${recommendedDays}일)`;
+        const formulaText = `목표 변화량 ${absWeightChangeKg.toFixed(1)}kg ÷ 선택 주간 속도 ${absWeeklyChangeKg.toFixed(2)}kg/주 = 약 ${selectedWeeks}주 (${selectedDays}일)`;
         const scientificEvidenceText = isWeightLoss
-            ? `체지방 1kg은 약 7,700kcal에 해당하며, 근손실 방지를 위한 스포츠 영양학 권장 감량 속도는 주당 체중의 0.5%~0.7%(약 ${optimalWeeklyChangeKg.toFixed(2)}kg/주)입니다 (Garthe et al., 2011; Helms et al., 2014). 따라서 3kg의 체중 차이는 약 5~6주(35~42일)의 권장 소요 기간 차이로 정직하게 산출됩니다.`
+            ? `NCBI StatPearls(Management of Weight Loss Plateau)에 따르면 주당 0.5kg~1.0kg(체중의 약 0.7%, 현재 기준 주당 ${standardWeeklyRateKg.toFixed(2)}kg) 감량이 의학적 권장 표준입니다. 최근 란셋(Purcell et al., 2014) 및 유럽비만학회(ECO, 노르웨이 284명 RCT) 연구는 장기 체중 유지의 핵심이 감량 속도가 아닌 '감량 후 유지기(Maintenance Architecture)와 고단백·근력 운동 습관'임을 입증했습니다. 이에 따라 표준 코스(NCBI), 가속 코스(Purcell/ECO), 완만 코스(Garthe)를 자유롭게 선택할 수 있습니다.`
             : `골격근 중심의 린매스업을 위한 스포츠 영양학 권장 증량 속도는 주당 약 ${optimalWeeklyChangeKg.toFixed(2)}kg(체지방 축적 방지선)입니다 (Aragon et al., 2017).`;
 
         return {
             isWeightLoss,
             absWeightChangeKg,
             optimalWeeklyChangeKg,
+            standardWeeklyRateKg,
+            acceleratedWeeklyRateKg,
+            gentleWeeklyRateKg,
+            standardDays,
+            acceleratedDays,
+            gentleDays,
             formulaText,
             scientificEvidenceText,
             recommendedDays,
