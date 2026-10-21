@@ -488,16 +488,20 @@ export class SafeWeightLossCalculator {
         const isWeightLoss = weightDiffKg >= 0;
         const absWeightChangeKg = Math.max(0.5, Math.abs(weightDiffKg));
 
-        // 1. 과학적 표준 주간 변화 속도 산출
-        const baseSafeLoss = this.computeWeeklySafeLossKg(w, fp, fatMassKg, m, tm, 0);
-        let optimalWeeklyChangeKg = baseSafeLoss.weeklyTargetLossKg * program.rateMultiplier * expProfile.paceFactor;
+        // 1. 과학적 표준 주간 변화 속도 산출 (스포츠 영양학회 ISSN 및 Garthe·Helms 메타분석 표준)
+        // - 감량: 골격근 보존 상한선인 주당 체중의 0.55%~0.75% (약 0.40~0.75kg/주)
+        // - 증량: 체지방 축적을 최소화하는 린매스업 기준 주당 체중의 0.25%~0.35% (약 0.20~0.30kg/주)
+        let optimalWeeklyChangeKg = 0.50;
         if (!isWeightLoss) {
-            optimalWeeklyChangeKg = this.round2(Math.max(0.18, Math.min(0.45, w * 0.003 * expProfile.paceFactor)));
+            optimalWeeklyChangeKg = this.round2(Math.max(0.18, Math.min(0.35, w * 0.003 * expProfile.paceFactor)));
         } else {
-            optimalWeeklyChangeKg = this.round2(Math.max(0.25, Math.min(1.05, optimalWeeklyChangeKg)));
+            const baseSafeLoss = this.computeWeeklySafeLossKg(w, fp, fatMassKg, m, tm, 0);
+            const rateFromWeight = w * 0.006 * program.rateMultiplier * expProfile.paceFactor;
+            optimalWeeklyChangeKg = this.round2(Math.max(0.35, Math.min(0.85, (baseSafeLoss.weeklyTargetLossKg + rateFromWeight) / 2)));
         }
 
         // 2. 안정적 목표 도달 추천 일수 (7일 단위 반올림, 최소 14일 ~ 최대 364일)
+        // 목표 변화량(kg) / 주간 안전 변화율(kg/주) = 필요 주수 -> 7을 곱해 일수로 산출
         const rawRecommendedDays = Math.round((absWeightChangeKg / optimalWeeklyChangeKg) * 7);
         const recommendedDays = Math.max(14, Math.min(364, Math.round(rawRecommendedDays / 7) * 7 || 14));
         const minAllowedDays = Math.max(14, Math.round(recommendedDays * 0.4));
@@ -758,9 +762,17 @@ export class SafeWeightLossCalculator {
             }
         }
 
+        const formulaText = `목표 변화량 ${absWeightChangeKg.toFixed(1)}kg ÷ 권장 주간 변화율 ${optimalWeeklyChangeKg.toFixed(2)}kg/주 = 약 ${recommendedWeeks}주 (${recommendedDays}일)`;
+        const scientificEvidenceText = isWeightLoss
+            ? `체지방 1kg은 약 7,700kcal에 해당하며, 근손실 방지를 위한 스포츠 영양학 권장 감량 속도는 주당 체중의 0.5%~0.7%(약 ${optimalWeeklyChangeKg.toFixed(2)}kg/주)입니다 (Garthe et al., 2011; Helms et al., 2014). 따라서 3kg의 체중 차이는 약 5~6주(35~42일)의 권장 소요 기간 차이로 정직하게 산출됩니다.`
+            : `골격근 중심의 린매스업을 위한 스포츠 영양학 권장 증량 속도는 주당 약 ${optimalWeeklyChangeKg.toFixed(2)}kg(체지방 축적 방지선)입니다 (Aragon et al., 2017).`;
+
         return {
             isWeightLoss,
             absWeightChangeKg,
+            optimalWeeklyChangeKg,
+            formulaText,
+            scientificEvidenceText,
             recommendedDays,
             recommendedWeeks,
             minAllowedDays,

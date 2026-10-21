@@ -565,114 +565,163 @@ export const HabitMealCatalog = {
  * 사용자가 직접 입력한 음식명/식단 텍스트(예: "계란 2개, 사과 반쪽, 우유" 또는 "육회비빔밥", "순대국밥, 만두 3개")를
  * 분석하여 평균적인 칼로리(kcal)와 단백질·탄수화물·지방(g)을 자동 추정하는 영양 사전 및 파서
  */
+/**
+ * 사용자가 직접 입력한 음식명/식단 텍스트(예: "계란후라이 + 공기밥 + 김치 + 스팸 3조각" 또는 "닭가슴살 200g")를
+ * 정밀 분석하여 그램수(g) 및 조각(슬라이스) 단위를 할루시네이션 없이 정확하게 자동 계산하는 영양 사전 및 파서
+ */
 export class SmartFoodCalorieEstimator {
     static FOOD_DB = [
-        // 1. 계란 · 닭가슴살 · 두부 · 단백질 단품
-        { keys: ["프로틴쉐이크", "단백질쉐이크", "단백질보충제", "프로틴", "쉐이크", "wpi", "wpc"], name: "단백질 쉐이크", unit: "스쿱", kcal: 150, pro: 25, carb: 6, fat: 2 },
-        { keys: ["더단백", "셀렉스", "하이뮨", "단백질음료", "프로틴음료"], name: "단백질 음료(RTD)", unit: "팩", kcal: 145, pro: 20, carb: 6, fat: 3 },
-        { keys: ["단백질바", "프로틴바", "에너지바"], name: "단백질바", unit: "개", kcal: 195, pro: 14, carb: 20, fat: 7 },
-        { keys: ["계란프라이", "계란후라이", "달걀프라이", "달걀후라이"], name: "계란프라이", unit: "개", kcal: 85, pro: 6, carb: 1, fat: 6 },
-        { keys: ["계란말이", "달걀말이", "계란찜"], name: "계란말이/찜(1인분)", unit: "인분", kcal: 170, pro: 13, carb: 4, fat: 11 },
-        { keys: ["삶은계란", "구운계란", "훈제란", "감동란", "반숙란", "계란", "달걀"], name: "계란", unit: "개", kcal: 70, pro: 6, carb: 1, fat: 5 },
-        { keys: ["닭가슴살소시지", "닭가슴살볼", "닭가슴살스테이크"], name: "닭가슴살 가공품(1팩)", unit: "팩", kcal: 155, pro: 22, carb: 8, fat: 4 },
-        { keys: ["닭가슴살샐러드"], name: "닭가슴살 샐러드", unit: "그릇", kcal: 360, pro: 30, carb: 26, fat: 14 },
-        { keys: ["닭가슴살"], name: "닭가슴살(100g 1팩)", unit: "팩", kcal: 120, pro: 25, carb: 2, fat: 2 },
-        { keys: ["두부부침", "두부김치"], name: "두부요리", unit: "인분", kcal: 320, pro: 20, carb: 16, fat: 18 },
-        { keys: ["연두부", "순두부", "두부"], name: "두부(1/2모 기준)", unit: "모", kcal: 130, pro: 12, carb: 4, fat: 7 },
-        { keys: ["낫또", "나또"], name: "낫또", unit: "팩", kcal: 100, pro: 8, carb: 6, fat: 5 },
+        // 1. 단백질 단품 (닭가슴살, 육류, 계란, 두부, 쉐이크)
+        { keys: ["스팸3조각", "스팸조각", "스팸슬라이스", "구운스팸", "리챔", "런천미트", "스팸"], name: "스팸(슬라이스)", unit: "조각", baseGrams: 25, kcal: 85, pro: 3, carb: 1, fat: 8, isSpam: true },
+        { keys: ["프로틴쉐이크", "단백질쉐이크", "단백질보충제", "프로틴", "쉐이크", "wpi", "wpc"], name: "단백질 쉐이크", unit: "스쿱", baseGrams: 35, kcal: 150, pro: 25, carb: 6, fat: 2 },
+        { keys: ["더단백", "셀렉스", "하이뮨", "단백질음료", "프로틴음료"], name: "단백질 음료(RTD)", unit: "팩", baseGrams: 250, kcal: 145, pro: 20, carb: 6, fat: 3 },
+        { keys: ["단백질바", "프로틴바", "에너지바"], name: "단백질바", unit: "개", baseGrams: 50, kcal: 195, pro: 14, carb: 20, fat: 7 },
+        { keys: ["계란후라이", "계란프라이", "달걀후라이", "달걀프라이"], name: "계란후라이", unit: "개", baseGrams: 55, kcal: 85, pro: 6, carb: 1, fat: 6 },
+        { keys: ["계란말이", "달걀말이", "계란찜"], name: "계란말이/찜", unit: "인분", baseGrams: 120, kcal: 170, pro: 13, carb: 4, fat: 11 },
+        { keys: ["삶은계란", "구운계란", "훈제란", "감동란", "반숙란", "계란", "달걀"], name: "삶은 계란", unit: "개", baseGrams: 50, kcal: 70, pro: 6, carb: 1, fat: 5 },
+        { keys: ["닭가슴살소시지", "닭가슴살볼", "닭가슴살스테이크"], name: "닭가슴살 가공품(1팩)", unit: "팩", baseGrams: 100, kcal: 155, pro: 22, carb: 8, fat: 4 },
+        { keys: ["닭가슴살샐러드"], name: "닭가슴살 샐러드", unit: "그릇", baseGrams: 250, kcal: 360, pro: 30, carb: 26, fat: 14 },
+        { keys: ["닭가슴살", "닭안심"], name: "닭가슴살", unit: "100g", baseGrams: 100, kcal: 120, pro: 24, carb: 1, fat: 2 },
+        { keys: ["소고기", "우둔살", "홍두깨살", "소안심", "부채살", "소볼살", "소살코기"], name: "소고기 살코기", unit: "100g", baseGrams: 100, kcal: 155, pro: 23, carb: 0, fat: 7 },
+        { keys: ["돼지안심", "돼지등심", "돼지살코기"], name: "돼지고기 살코기", unit: "100g", baseGrams: 100, kcal: 145, pro: 22, carb: 0, fat: 6 },
+        { keys: ["삼겹살", "오겹살", "대패삼겹살"], name: "삼겹살", unit: "100g", baseGrams: 100, kcal: 330, pro: 17, carb: 0, fat: 29 },
+        { keys: ["돼지목살", "목살구이", "목살"], name: "돼지목살", unit: "100g", baseGrams: 100, kcal: 230, pro: 20, carb: 0, fat: 16 },
+        { keys: ["차돌박이", "우삼겹"], name: "차돌박이/우삼겹", unit: "100g", baseGrams: 100, kcal: 350, pro: 14, carb: 0, fat: 32 },
+        { keys: ["두부부침", "두부김치"], name: "두부요리", unit: "인분", baseGrams: 160, kcal: 280, pro: 18, carb: 14, fat: 16 },
+        { keys: ["연두부", "순두부", "두부"], name: "두부(1/2모)", unit: "모", baseGrams: 150, kcal: 120, pro: 12, carb: 3, fat: 6 },
+        { keys: ["낫또", "나또"], name: "낫또", unit: "팩", baseGrams: 50, kcal: 95, pro: 8, carb: 6, fat: 4 },
+        { keys: ["참치캔", "동원참치", "캔참치"], name: "참치캔(라이트)", unit: "캔", baseGrams: 100, kcal: 135, pro: 19, carb: 0, fat: 6 },
+        { keys: ["연어구이", "생연어", "연어"], name: "연어", unit: "100g", baseGrams: 100, kcal: 205, pro: 22, carb: 0, fat: 13 },
+        { keys: ["고등어구이", "고등어"], name: "고등어구이(반 토막)", unit: "토막", baseGrams: 100, kcal: 210, pro: 20, carb: 0, fat: 14 },
+        { keys: ["슬라이스치즈", "체다치즈", "치즈"], name: "슬라이스 치즈", unit: "장", baseGrams: 20, kcal: 65, pro: 4, carb: 1, fat: 5 },
 
-        // 2. 과일 · 구황작물 · 곡물 · 시리얼 · 빵 · 떡
-        { keys: ["군고구마", "찐고구마", "고구마"], name: "고구마(중 1개 150g)", unit: "개", kcal: 195, pro: 3, carb: 45, fat: 0 },
-        { keys: ["감자", "찐감자", "구운감자"], name: "감자(중 1개)", unit: "개", kcal: 110, pro: 3, carb: 25, fat: 0 },
-        { keys: ["단호박", "미니단호박"], name: "단호박(150g)", unit: "개", kcal: 105, pro: 2, carb: 24, fat: 0 },
-        { keys: ["사과"], name: "사과", unit: "개", kcal: 110, pro: 1, carb: 28, fat: 0 },
-        { keys: ["바나나"], name: "바나나", unit: "개", kcal: 105, pro: 1, carb: 27, fat: 0 },
-        { keys: ["방울토마토", "토마토"], name: "토마토(1회분)", unit: "접시", kcal: 35, pro: 1, carb: 8, fat: 0 },
-        { keys: ["귤", "오렌지", "천혜향", "한라봉"], name: "감귤/오렌지", unit: "개", kcal: 65, pro: 1, carb: 16, fat: 0 },
-        { keys: ["블루베리", "딸기", "포도", "키위", "배", "복숭아", "과일"], name: "과일(1인분)", unit: "회", kcal: 85, pro: 1, carb: 21, fat: 0 },
-        { keys: ["오트밀", "귀리"], name: "오트밀(1회분 45g)", unit: "회", kcal: 175, pro: 6, carb: 30, fat: 3 },
-        { keys: ["그래놀라", "시리얼", "콘푸라이트", "첵스"], name: "시리얼/그래놀라(1회분)", unit: "회", kcal: 230, pro: 5, carb: 42, fat: 5 },
-        { keys: ["그릭요거트"], name: "그릭요거트(120g)", unit: "개", kcal: 140, pro: 12, carb: 8, fat: 6 },
-        { keys: ["요거트", "요플레", "비요뜨"], name: "일반 요거트", unit: "개", kcal: 135, pro: 5, carb: 21, fat: 4 },
-        { keys: ["무가당두유", "약콩두유", "두유"], name: "두유(190ml)", unit: "팩", kcal: 105, pro: 7, carb: 8, fat: 5 },
-        { keys: ["저지방우유", "우유"], name: "우유(200ml)", unit: "컵", kcal: 125, pro: 6, carb: 10, fat: 7 },
-        { keys: ["아몬드브리즈", "오트사이드", "귀리우유"], name: "식물성 음료(190ml)", unit: "팩", kcal: 65, pro: 2, carb: 9, fat: 2 },
-        { keys: ["견과류", "하루견과", "아몬드", "호두", "땅콩"], name: "견과류(1봉 25g)", unit: "봉", kcal: 145, pro: 5, carb: 5, fat: 13 },
-        { keys: ["땅콩버터", "피넛버터"], name: "땅콩버터(1큰술)", unit: "스푼", kcal: 95, pro: 4, carb: 3, fat: 8 },
-        { keys: ["베이글"], name: "베이글", unit: "개", kcal: 280, pro: 9, carb: 54, fat: 3 },
-        { keys: ["크림치즈"], name: "크림치즈(1회분)", unit: "회", kcal: 100, pro: 2, carb: 2, fat: 10 },
-        { keys: ["식빵", "토스트", "호밀빵", "통밀빵", "모닝빵"], name: "식빵/통밀빵(1장)", unit: "장", kcal: 110, pro: 4, carb: 20, fat: 2 },
-        { keys: ["크루아상", "소금빵", "단팥빵", "소보로빵", "크림빵", "빵"], name: "베이커리 빵", unit: "개", kcal: 290, pro: 6, carb: 42, fat: 11 },
-        { keys: ["서브웨이"], name: "서브웨이 샌드위치(15cm)", unit: "개", kcal: 420, pro: 28, carb: 44, fat: 14 },
-        { keys: ["샌드위치", "에그드랍", "이삭토스트"], name: "샌드위치/토스트", unit: "개", kcal: 410, pro: 20, carb: 44, fat: 17 },
-        { keys: ["삼각김밥"], name: "삼각김밥", unit: "개", kcal: 185, pro: 4, carb: 34, fat: 3 },
-        { keys: ["김밥", "참치김밥", "키토김밥"], name: "김밥(1줄)", unit: "줄", kcal: 460, pro: 14, carb: 72, fat: 13 },
-        { keys: ["떡", "백설기", "인절미", "절편", "가래떡"], name: "떡(1인분)", unit: "회", kcal: 260, pro: 5, carb: 56, fat: 2 },
-        { keys: ["선식", "미숫가루"], name: "미숫가루/선식(1잔)", unit: "잔", kcal: 210, pro: 7, carb: 36, fat: 4 },
+        // 2. 김치 및 한식 밑반찬류 (작은 종지 1회분 기준, 할루시네이션 방지)
+        { keys: ["배추김치", "깍두기", "열무김치", "파김치", "겉절이", "총각김치", "김치"], name: "김치", unit: "회", baseGrams: 40, kcal: 18, pro: 1, carb: 3, fat: 0, isSide: true },
+        { keys: ["볶음김치"], name: "볶음김치", unit: "회", baseGrams: 45, kcal: 45, pro: 1, carb: 5, fat: 2, isSide: true },
+        { keys: ["김", "조미김", "구운김", "도시락김"], name: "조미김(1봉)", unit: "봉", baseGrams: 5, kcal: 25, pro: 1, carb: 1, fat: 2, isSide: true },
+        { keys: ["멸치볶음"], name: "멸치볶음", unit: "회", baseGrams: 25, kcal: 75, pro: 5, carb: 4, fat: 4, isSide: true },
+        { keys: ["나물", "시금치나물", "콩나물무침", "나물무침", "시금치", "콩나물"], name: "나물 반찬", unit: "회", baseGrams: 50, kcal: 35, pro: 2, carb: 3, fat: 2, isSide: true },
+        { keys: ["어묵볶음", "오뎅볶음"], name: "어묵볶음", unit: "회", baseGrams: 50, kcal: 90, pro: 5, carb: 9, fat: 4, isSide: true },
+        { keys: ["진미채", "오징어채"], name: "진미채볶음", unit: "회", baseGrams: 30, kcal: 90, pro: 8, carb: 11, fat: 1, isSide: true },
+        { keys: ["단무지", "피클", "쌈무"], name: "절임 반찬", unit: "회", baseGrams: 30, kcal: 15, pro: 0, carb: 3, fat: 0, isSide: true },
 
-        // 3. 한식 밥 · 국밥 · 탕 · 찌개 · 백반 · 고기 · 생선
-        { keys: ["현미밥", "잡곡밥", "오곡밥", "곤약밥"], name: "잡곡/현미밥(1공기)", unit: "공기", kcal: 290, pro: 6, carb: 63, fat: 2 },
-        { keys: ["공기밥", "흰쌀밥", "쌀밥", "햇반", "밥"], name: "쌀밥(1공기)", unit: "공기", kcal: 300, pro: 5, carb: 66, fat: 1 },
-        { keys: ["설렁탕", "곰탕", "도가니탕", "꼬리곰탕"], name: "설렁탕/곰탕(밥 포함)", unit: "그릇", kcal: 880, pro: 34, carb: 96, fat: 38 },
-        { keys: ["갈비탕", "왕갈비탕"], name: "갈비탕(밥 포함)", unit: "그릇", kcal: 920, pro: 42, carb: 94, fat: 40 },
-        { keys: ["삼계탕", "반계탕", "닭곰탕", "닭한마리"], name: "삼계탕/닭곰탕", unit: "그릇", kcal: 910, pro: 52, carb: 86, fat: 38 },
-        { keys: ["돼지국밥", "순대국밥", "순댓국", "내장탕", "소머리국밥", "국밥"], name: "국밥(밥 포함)", unit: "그릇", kcal: 960, pro: 42, carb: 102, fat: 42 },
-        { keys: ["뼈해장국", "감자탕", "선지해장국", "해장국", "육개장", "추어탕", "매운탕", "동태탕"], name: "해장국/육개장(밥 포함)", unit: "그릇", kcal: 890, pro: 38, carb: 96, fat: 36 },
-        { keys: ["부대찌개"], name: "부대찌개 정식(밥 포함)", unit: "인분", kcal: 920, pro: 32, carb: 110, fat: 38 },
-        { keys: ["김치찌개", "참치김치찌개", "돼지김치찌개"], name: "김치찌개 정식(밥 포함)", unit: "인분", kcal: 840, pro: 30, carb: 102, fat: 32 },
-        { keys: ["순두부찌개", "차돌순두부", "해물순두부"], name: "순두부찌개 정식(밥 포함)", unit: "인분", kcal: 810, pro: 31, carb: 98, fat: 30 },
-        { keys: ["된장찌개", "청국장", "차돌된장"], name: "된장/청국장 정식(밥 포함)", unit: "인분", kcal: 760, pro: 27, carb: 100, fat: 25 },
-        { keys: ["육회비빔밥"], name: "육회비빔밥", unit: "그릇", kcal: 780, pro: 34, carb: 106, fat: 23 },
-        { keys: ["돌솥비빔밥", "비빔밥", "보리밥", "열무비빔밥", "꼬막비빔밥"], name: "비빔밥", unit: "그릇", kcal: 760, pro: 25, carb: 112, fat: 22 },
-        { keys: ["제육덮밥", "제육볶음", "돼지불백", "불백"], name: "제육볶음/불백 정식", unit: "인분", kcal: 920, pro: 38, carb: 106, fat: 36 },
-        { keys: ["오징어볶음", "낙지볶음", "쭈꾸미볶음", "쭈꾸미"], name: "낙지/쭈꾸미/오징어볶음 정식", unit: "인분", kcal: 830, pro: 34, carb: 108, fat: 26 },
-        { keys: ["불고기", "소불고기", "뚝배기불고기"], name: "소불고기 정식", unit: "인분", kcal: 860, pro: 38, carb: 98, fat: 32 },
-        { keys: ["보쌈", "수육", "족발"], name: "보쌈/수육/족발 정식", unit: "인분", kcal: 960, pro: 45, carb: 88, fat: 46 },
-        { keys: ["삼겹살", "목살", "갈비", "소고기구이"], name: "고기구이 식사(1인분)", unit: "인분", kcal: 980, pro: 42, carb: 70, fat: 58 },
-        { keys: ["생선구이", "고등어구이", "삼치구이", "갈치구이", "임연수"], name: "생선구이 백반 정식", unit: "인분", kcal: 780, pro: 40, carb: 90, fat: 27 },
-        { keys: ["닭갈비", "찜닭"], name: "닭갈비/찜닭 식사", unit: "인분", kcal: 920, pro: 43, carb: 108, fat: 33 },
-        { keys: ["백반", "한식뷔페", "구내식당"], name: "구내식당/한식 백반 정식", unit: "인분", kcal: 940, pro: 30, carb: 120, fat: 36 },
+        // 3. 밥 · 곡물 · 고구마 · 감자 · 빵 · 떡
+        { keys: ["공기밥", "흰쌀밥", "쌀밥", "햇반", "흰밥", "밥"], name: "쌀밥(1공기)", unit: "공기", baseGrams: 210, kcal: 300, pro: 5, carb: 66, fat: 1 },
+        { keys: ["현미밥", "잡곡밥", "오곡밥", "곤약밥"], name: "잡곡/현미밥(1공기)", unit: "공기", baseGrams: 210, kcal: 290, pro: 6, carb: 63, fat: 2 },
+        { keys: ["군고구마", "찐고구마", "고구마"], name: "고구마(중 1개)", unit: "개", baseGrams: 150, kcal: 195, pro: 3, carb: 45, fat: 0 },
+        { keys: ["감자", "찐감자", "구운감자"], name: "감자(중 1개)", unit: "개", baseGrams: 130, kcal: 110, pro: 3, carb: 25, fat: 0 },
+        { keys: ["단호박", "미니단호박"], name: "단호박", unit: "개", baseGrams: 150, kcal: 105, pro: 2, carb: 24, fat: 0 },
+        { keys: ["사과"], name: "사과(1개)", unit: "개", baseGrams: 220, kcal: 110, pro: 1, carb: 28, fat: 0 },
+        { keys: ["바나나"], name: "바나나(1개)", unit: "개", baseGrams: 110, kcal: 105, pro: 1, carb: 27, fat: 0 },
+        { keys: ["방울토마토", "토마토"], name: "토마토(1접시)", unit: "접시", baseGrams: 150, kcal: 35, pro: 1, carb: 8, fat: 0 },
+        { keys: ["귤", "오렌지", "천혜향", "한라봉"], name: "감귤/오렌지", unit: "개", baseGrams: 120, kcal: 65, pro: 1, carb: 16, fat: 0 },
+        { keys: ["블루베리", "딸기", "포도", "키위", "배", "복숭아", "과일"], name: "과일(1회분)", unit: "회", baseGrams: 150, kcal: 85, pro: 1, carb: 21, fat: 0 },
+        { keys: ["오트밀", "귀리"], name: "오트밀(1회분)", unit: "회", baseGrams: 45, kcal: 175, pro: 6, carb: 30, fat: 3 },
+        { keys: ["그래놀라", "시리얼", "콘푸라이트", "첵스"], name: "시리얼/그래놀라(1회분)", unit: "회", baseGrams: 50, kcal: 230, pro: 5, carb: 42, fat: 5 },
+        { keys: ["그릭요거트"], name: "그릭요거트", unit: "개", baseGrams: 120, kcal: 140, pro: 12, carb: 8, fat: 6 },
+        { keys: ["요거트", "요플레", "비요뜨"], name: "일반 요거트", unit: "개", baseGrams: 100, kcal: 135, pro: 5, carb: 21, fat: 4 },
+        { keys: ["무가당두유", "약콩두유", "두유"], name: "두유(190ml)", unit: "팩", baseGrams: 190, kcal: 105, pro: 7, carb: 8, fat: 5 },
+        { keys: ["저지방우유", "우유"], name: "우유(200ml)", unit: "컵", baseGrams: 200, kcal: 125, pro: 6, carb: 10, fat: 7 },
+        { keys: ["아몬드브리즈", "오트사이드", "귀리우유"], name: "식물성 음료(190ml)", unit: "팩", baseGrams: 190, kcal: 65, pro: 2, carb: 9, fat: 2 },
+        { keys: ["견과류", "하루견과", "아몬드", "호두", "땅콩"], name: "견과류(1봉)", unit: "봉", baseGrams: 25, kcal: 145, pro: 5, carb: 5, fat: 13 },
+        { keys: ["땅콩버터", "피넛버터"], name: "땅콩버터(1큰술)", unit: "스푼", baseGrams: 15, kcal: 95, pro: 4, carb: 3, fat: 8 },
+        { keys: ["베이글"], name: "베이글", unit: "개", baseGrams: 110, kcal: 280, pro: 9, carb: 54, fat: 3 },
+        { keys: ["크림치즈"], name: "크림치즈(1회분)", unit: "회", baseGrams: 25, kcal: 100, pro: 2, carb: 2, fat: 10 },
+        { keys: ["식빵", "토스트", "호밀빵", "통밀빵", "모닝빵"], name: "식빵/통밀빵", unit: "장", baseGrams: 40, kcal: 110, pro: 4, carb: 20, fat: 2 },
+        { keys: ["서브웨이"], name: "서브웨이 샌드위치(15cm)", unit: "개", baseGrams: 240, kcal: 420, pro: 28, carb: 44, fat: 14 },
+        { keys: ["샌드위치", "에그드랍", "이삭토스트"], name: "샌드위치/토스트", unit: "개", baseGrams: 200, kcal: 410, pro: 20, carb: 44, fat: 17 },
+        { keys: ["삼각김밥"], name: "삼각김밥", unit: "개", baseGrams: 110, kcal: 185, pro: 4, carb: 34, fat: 3 },
+        { keys: ["김밥", "참치김밥", "키토김밥"], name: "김밥(1줄)", unit: "줄", baseGrams: 240, kcal: 460, pro: 14, carb: 72, fat: 13 },
 
-        // 4. 일식 · 중식 · 면류 · 분식 · 양식 · 패스트푸드 · 포케
-        { keys: ["치즈돈까스", "왕돈까스", "돈까스", "돈가스", "생선까스"], name: "돈까스 정식", unit: "인분", kcal: 1010, pro: 35, carb: 114, fat: 45 },
-        { keys: ["초밥", "스시"], name: "모둠 초밥(10~12피스)", unit: "세트", kcal: 720, pro: 33, carb: 105, fat: 16 },
-        { keys: ["회덮밥", "연어덮밥", "사케동", "카이센동"], name: "회덮밥/연어덮밥", unit: "그릇", kcal: 760, pro: 34, carb: 98, fat: 22 },
-        { keys: ["규동", "가츠동", "텐동", "차슈동", "덮밥"], name: "일식 덮밥", unit: "그릇", kcal: 860, pro: 32, carb: 112, fat: 30 },
-        { keys: ["라멘", "돈코츠라멘", "우동", "메밀소바", "소바"], name: "일식 라멘/우동/소바", unit: "그릇", kcal: 790, pro: 26, carb: 106, fat: 28 },
-        { keys: ["짜장면", "간짜장"], name: "짜장면", unit: "그릇", kcal: 860, pro: 22, carb: 132, fat: 27 },
-        { keys: ["짬뽕", "차돌짬뽕"], name: "짬뽕", unit: "그릇", kcal: 840, pro: 28, carb: 112, fat: 29 },
-        { keys: ["중국집볶음밥", "새우볶음밥", "김치볶음밥", "볶음밥"], name: "볶음밥", unit: "그릇", kcal: 880, pro: 24, carb: 122, fat: 32 },
-        { keys: ["탕수육", "꿔바로우", "유린기", "깐풍기"], name: "탕수육/중식튀김(1인 곁들임)", unit: "인분", kcal: 480, pro: 18, carb: 52, fat: 22 },
-        { keys: ["마라탕", "마라샹궈"], name: "마라탕/마라샹궈(1인분)", unit: "그릇", kcal: 880, pro: 33, carb: 86, fat: 44 },
-        { keys: ["쌀국수", "베트남쌀국수", "팟타이"], name: "베트남 쌀국수/팟타이", unit: "그릇", kcal: 720, pro: 29, carb: 102, fat: 19 },
-        { keys: ["칼국수", "수제비", "잔치국수", "비빔국수", "막국수", "콩국수", "냉면", "물냉면", "비빔냉면"], name: "국수/칼국수/냉면", unit: "그릇", kcal: 750, pro: 24, carb: 124, fat: 16 },
-        { keys: ["떡만둣국", "만둣국", "떡국"], name: "떡만둣국", unit: "그릇", kcal: 780, pro: 26, carb: 118, fat: 22 },
-        { keys: ["군만두", "찐만두", "고기만두", "김치만두", "만두"], name: "만두(1알 기준, 기본 4알 시 수량 입력)", unit: "개", kcal: 65, pro: 3, carb: 7, fat: 3 },
-        { keys: ["라면", "컵라면", "신라면"], name: "라면", unit: "개", kcal: 500, pro: 10, carb: 78, fat: 16 },
-        { keys: ["떡볶이", "로제떡볶이", "순대"], name: "떡볶이/순대(1인분)", unit: "인분", kcal: 620, pro: 15, carb: 108, fat: 14 },
-        { keys: ["파스타", "스파게티", "크림파스타", "토마토파스타", "오일파스타", "리조또"], name: "파스타/리조또", unit: "접시", kcal: 850, pro: 26, carb: 104, fat: 36 },
-        { keys: ["피자"], name: "피자(2조각 기준)", unit: "회", kcal: 640, pro: 26, carb: 72, fat: 28 },
-        { keys: ["치킨", "양념치킨", "후라이드치킨", "구운치킨"], name: "치킨(반 마리 기준)", unit: "회", kcal: 890, pro: 52, carb: 48, fat: 54 },
-        { keys: ["햄버거세트", "버거세트"], name: "햄버거 세트", unit: "세트", kcal: 960, pro: 33, carb: 112, fat: 42 },
-        { keys: ["햄버거", "수제버거", "싸이버거", "불고기버거", "치즈버거", "버거"], name: "햄버거 단품", unit: "개", kcal: 560, pro: 26, carb: 52, fat: 27 },
-        { keys: ["포케", "연어포케", "닭가슴살포케", "샐러드볼", "샐러드", "다이어트도시락"], name: "포케/다이어트 샐러드 도시락", unit: "그릇", kcal: 520, pro: 35, carb: 52, fat: 18 },
+        // 4. 외식 · 국밥 · 탕 · 찌개 · 면 · 정식
+        { keys: ["설렁탕", "곰탕", "도가니탕", "꼬리곰탕"], name: "설렁탕/곰탕(밥 포함)", unit: "그릇", baseGrams: 700, kcal: 880, pro: 34, carb: 96, fat: 38 },
+        { keys: ["갈비탕", "왕갈비탕"], name: "갈비탕(밥 포함)", unit: "그릇", baseGrams: 750, kcal: 920, pro: 42, carb: 94, fat: 40 },
+        { keys: ["삼계탕", "반계탕", "닭곰탕", "닭한마리"], name: "삼계탕/닭곰탕", unit: "그릇", baseGrams: 800, kcal: 910, pro: 52, carb: 86, fat: 38 },
+        { keys: ["돼지국밥", "순대국밥", "순댓국", "내장탕", "소머리국밥", "국밥"], name: "국밥(밥 포함)", unit: "그릇", baseGrams: 750, kcal: 960, pro: 42, carb: 102, fat: 42 },
+        { keys: ["뼈해장국", "감자탕", "선지해장국", "해장국", "육개장", "추어탕"], name: "해장국/육개장(밥 포함)", unit: "그릇", baseGrams: 750, kcal: 890, pro: 38, carb: 96, fat: 36 },
+        { keys: ["부대찌개"], name: "부대찌개 정식(밥 포함)", unit: "인분", baseGrams: 500, kcal: 920, pro: 32, carb: 110, fat: 38 },
+        { keys: ["김치찌개", "참치김치찌개", "돼지김치찌개"], name: "김치찌개 정식(밥 포함)", unit: "인분", baseGrams: 450, kcal: 840, pro: 30, carb: 102, fat: 32 },
+        { keys: ["순두부찌개", "차돌순두부", "해물순두부"], name: "순두부찌개 정식(밥 포함)", unit: "인분", baseGrams: 450, kcal: 810, pro: 31, carb: 98, fat: 30 },
+        { keys: ["된장찌개", "청국장", "차돌된장"], name: "된장/청국장 정식(밥 포함)", unit: "인분", baseGrams: 400, kcal: 760, pro: 27, carb: 100, fat: 25 },
+        { keys: ["육회비빔밥"], name: "육회비빔밥", unit: "그릇", baseGrams: 450, kcal: 780, pro: 34, carb: 106, fat: 23 },
+        { keys: ["돌솥비빔밥", "비빔밥", "보리밥"], name: "비빔밥", unit: "그릇", baseGrams: 450, kcal: 760, pro: 25, carb: 112, fat: 22 },
+        { keys: ["제육덮밥", "제육볶음", "돼지불백", "불백"], name: "제육볶음/불백 정식", unit: "인분", baseGrams: 450, kcal: 920, pro: 38, carb: 106, fat: 36 },
+        { keys: ["오징어볶음", "낙지볶음", "쭈꾸미볶음"], name: "낙지/오징어볶음 정식", unit: "인분", baseGrams: 450, kcal: 830, pro: 34, carb: 108, fat: 26 },
+        { keys: ["소불고기", "뚝배기불고기", "불고기"], name: "소불고기 정식", unit: "인분", baseGrams: 450, kcal: 860, pro: 38, carb: 98, fat: 32 },
+        { keys: ["보쌈", "수육", "족발"], name: "보쌈/수육 정식", unit: "인분", baseGrams: 400, kcal: 960, pro: 45, carb: 88, fat: 46 },
+        { keys: ["치즈돈까스", "왕돈까스", "돈까스", "돈가스"], name: "돈까스 정식", unit: "인분", baseGrams: 450, kcal: 1010, pro: 35, carb: 114, fat: 45 },
+        { keys: ["초밥", "스시"], name: "모둠 초밥(10~12피스)", unit: "세트", baseGrams: 350, kcal: 720, pro: 33, carb: 105, fat: 16 },
+        { keys: ["회덮밥", "연어덮밥", "사케동"], name: "회덮밥/연어덮밥", unit: "그릇", baseGrams: 450, kcal: 760, pro: 34, carb: 98, fat: 22 },
+        { keys: ["규동", "가츠동", "텐동", "덮밥"], name: "일식 덮밥", unit: "그릇", baseGrams: 450, kcal: 860, pro: 32, carb: 112, fat: 30 },
+        { keys: ["라멘", "우동", "소바"], name: "라멘/우동", unit: "그릇", baseGrams: 550, kcal: 790, pro: 26, carb: 106, fat: 28 },
+        { keys: ["짜장면", "간짜장"], name: "짜장면", unit: "그릇", baseGrams: 550, kcal: 860, pro: 22, carb: 132, fat: 27 },
+        { keys: ["짬뽕", "차돌짬뽕"], name: "짬뽕", unit: "그릇", baseGrams: 650, kcal: 840, pro: 28, carb: 112, fat: 29 },
+        { keys: ["중국집볶음밥", "새우볶음밥", "김치볶음밥", "볶음밥"], name: "볶음밥", unit: "그릇", baseGrams: 400, kcal: 880, pro: 24, carb: 122, fat: 32 },
+        { keys: ["탕수육", "꿔바로우"], name: "탕수육(곁들임)", unit: "인분", baseGrams: 200, kcal: 480, pro: 18, carb: 52, fat: 22 },
+        { keys: ["마라탕", "마라샹궈"], name: "마라탕/샹궈", unit: "그릇", baseGrams: 550, kcal: 880, pro: 33, carb: 86, fat: 44 },
+        { keys: ["쌀국수", "팟타이"], name: "쌀국수/팟타이", unit: "그릇", baseGrams: 550, kcal: 720, pro: 29, carb: 102, fat: 19 },
+        { keys: ["칼국수", "수제비", "냉면", "물냉면", "비빔냉면"], name: "국수/칼국수/냉면", unit: "그릇", baseGrams: 550, kcal: 750, pro: 24, carb: 124, fat: 16 },
+        { keys: ["군만두", "찐만두", "만두"], name: "만두", unit: "개", baseGrams: 35, kcal: 65, pro: 3, carb: 7, fat: 3 },
+        { keys: ["라면", "컵라면"], name: "라면", unit: "개", baseGrams: 120, kcal: 500, pro: 10, carb: 78, fat: 16 },
+        { keys: ["떡볶이", "순대"], name: "떡볶이/순대", unit: "인분", baseGrams: 300, kcal: 620, pro: 15, carb: 108, fat: 14 },
+        { keys: ["파스타", "스파게티"], name: "파스타", unit: "접시", baseGrams: 380, kcal: 850, pro: 26, carb: 104, fat: 36 },
+        { keys: ["피자"], name: "피자", unit: "조각", baseGrams: 100, kcal: 260, pro: 11, carb: 28, fat: 12 },
+        { keys: ["치킨"], name: "치킨(반 마리)", unit: "회", baseGrams: 400, kcal: 890, pro: 52, carb: 48, fat: 54 },
+        { keys: ["햄버거세트"], name: "햄버거 세트", unit: "세트", baseGrams: 450, kcal: 960, pro: 33, carb: 112, fat: 42 },
+        { keys: ["햄버거", "버거"], name: "햄버거 단품", unit: "개", baseGrams: 220, kcal: 560, pro: 26, carb: 52, fat: 27 },
+        { keys: ["포케", "다이어트도시락", "샐러드볼", "샐러드"], name: "포케/클린 샐러드", unit: "그릇", baseGrams: 350, kcal: 520, pro: 35, carb: 52, fat: 18 },
 
-        // 5. 커피 · 음료 · 간식
-        { keys: ["바리스타", "컵커피", "프렌치카페", "매일카페라떼"], name: "편의점 컵커피", unit: "개", kcal: 174, pro: 5, carb: 24, fat: 6 },
-        { keys: ["바닐라라떼", "돌체라떼", "연유라떼", "카라멜마키아또", "카페모카", "모카"], name: "바닐라/돌체/모카 라떼", unit: "잔", kcal: 275, pro: 8, carb: 38, fat: 9 },
-        { keys: ["오트라떼", "귀리라떼", "두유라떼", "소이라떼"], name: "오트/두유 라떼", unit: "잔", kcal: 160, pro: 5, carb: 22, fat: 5 },
-        { keys: ["카페라떼", "카푸치노", "플랫화이트", "라떼"], name: "카페라떼", unit: "잔", kcal: 180, pro: 9, carb: 14, fat: 9 },
-        { keys: ["믹스커피", "커피믹스", "다방커피"], name: "믹스커피", unit: "잔", kcal: 55, pro: 0, carb: 9, fat: 2 },
-        { keys: ["아메리카노", "아아", "뜨아", "블랙커피", "콜드브루", "에스프레소"], name: "아메리카노/블랙커피", unit: "잔", kcal: 10, pro: 0, carb: 2, fat: 0 },
-        { keys: ["밀크티", "버블티", "공차", "말차라떼", "녹차라떼", "고구마라떼", "초코라떼"], name: "밀크티/논커피 라떼", unit: "잔", kcal: 280, pro: 6, carb: 46, fat: 8 },
-        { keys: ["아이스티", "복숭아아이스티", "에이드", "레몬에이드", "자몽에이드", "스무디", "주스", "과일주스"], name: "에이드/아이스티/스무디", unit: "잔", kcal: 250, pro: 1, carb: 58, fat: 1 },
-        { keys: ["제로콜라", "제로사이다", "제로음료", "탄산수", "녹차", "보리차"], name: "제로 음료/차", unit: "잔", kcal: 0, pro: 0, carb: 0, fat: 0 },
-        { keys: ["콜라", "사이다", "환타", "탄산음료"], name: "일반 탄산음료(1캔)", unit: "캔", kcal: 140, pro: 0, carb: 35, fat: 0 }
+        // 5. 커피 · 음료
+        { keys: ["바리스타", "컵커피"], name: "편의점 컵커피", unit: "개", baseGrams: 250, kcal: 174, pro: 5, carb: 24, fat: 6 },
+        { keys: ["바닐라라떼", "돌체라떼", "연유라떼", "카페모카"], name: "달콤 라떼", unit: "잔", baseGrams: 355, kcal: 275, pro: 8, carb: 38, fat: 9 },
+        { keys: ["오트라떼", "두유라떼"], name: "식물성 라떼", unit: "잔", baseGrams: 355, kcal: 160, pro: 5, carb: 22, fat: 5 },
+        { keys: ["카페라떼", "카푸치노"], name: "카페라떼", unit: "잔", baseGrams: 355, kcal: 180, pro: 9, carb: 14, fat: 9 },
+        { keys: ["믹스커피", "커피믹스"], name: "믹스커피", unit: "잔", baseGrams: 12, kcal: 55, pro: 0, carb: 9, fat: 2 },
+        { keys: ["아메리카노", "블랙커피", "콜드브루"], name: "아메리카노", unit: "잔", baseGrams: 355, kcal: 10, pro: 0, carb: 2, fat: 0 },
+        { keys: ["제로콜라", "제로사이다", "제로음료", "탄산수"], name: "제로 음료", unit: "잔", baseGrams: 355, kcal: 0, pro: 0, carb: 0, fat: 0 }
     ];
 
     /**
-     * 사용자가 입력한 자유 텍스트(예: "계란 3개, 사과 반개, 프로틴 1스쿱" 또는 "육회비빔밥")를 파싱하여
-     * 항목별 분석 내역과 총 평균 칼로리·단백질·탄수화물·지방을 반환합니다.
+     * 한글 수사("한개", "두조각", "세개", "세조각", "네개", "다섯조각")를 숫자로 변환합니다.
+     */
+    static parseKoreanNumber(text) {
+        const korNumMap = {
+            "반": 0.5,
+            "한": 1,
+            "하나": 1,
+            "일": 1,
+            "두": 2,
+            "둘": 2,
+            "이": 2,
+            "세": 3,
+            "셋": 3,
+            "삼": 3,
+            "네": 4,
+            "넷": 4,
+            "사": 4,
+            "다섯": 5,
+            "오": 5,
+            "여섯": 6,
+            "육": 6,
+            "일곱": 7,
+            "칠": 7,
+            "여덟": 8,
+            "팔": 8,
+            "아홉": 9,
+            "구": 9,
+            "열": 10,
+            "십": 10
+        };
+        const m = text.match(/(반|하나|한|둘|두|셋|세|넷|네|다섯|여섯|일곱|여덟|아홉|열)\s*(?:조각|슬라이스|장|쪽|토막|개|알|공기|그릇|줄|팩|캔|인분|모|봉|스푼|잔|컵)?/);
+        if (m && korNumMap[m[1]] !== undefined) {
+            return korNumMap[m[1]];
+        }
+        return null;
+    }
+
+    /**
+     * 사용자가 입력한 자유 텍스트(예: "계란후라이 + 공기밥 + 김치 + 스팸 3조각" 또는 "닭가슴살 200g")를 파싱하여
+     * 항목별 분석 내역과 총 평균 칼로리·단백질·탄수화물·지방을 정밀 반환합니다.
      */
     static estimateFromText(rawText, categoryHint = "LUNCH") {
         const cleaned = String(rawText || "").trim();
@@ -682,7 +731,7 @@ export class SmartFoodCalorieEstimator {
 
         // 쉼표(,), 플러스(+), 슬래시(/), '그리고', '랑', '와', '과' 또는 줄바꿈 기준으로 분리
         const segments = cleaned
-            .split(/[,+/\n]+|(?:\s+그리고\s+)|(?:\s+및\s+)/)
+            .split(/[,+/\n]+|(?:\s+그리고\s+)|(?:\s+및\s+)|(?:\s*와\s+)|(?:\s*과\s+)|(?:\s+랑\s+)/)
             .map(s => s.trim())
             .filter(Boolean);
 
@@ -696,28 +745,36 @@ export class SmartFoodCalorieEstimator {
             const normSeg = seg.replace(/\s+/g, "").toLowerCase();
             if (!normSeg) continue;
 
-            // 수량 추출: "반개/반공기/반줄" -> 0.5, "2개/3알/1.5스쿱/200g" 등
-            let multiplier = 1.0;
-            if (/반\s*(개|알|공기|그릇|줄|쪽|잔|모|팩|인분)/.test(seg) || normSeg.includes("반공기") || normSeg.includes("반개")) {
-                multiplier = 0.5;
-            } else if (normSeg.includes("곱빼기") || normSeg.includes("특대") || normSeg.includes("대짜")) {
-                multiplier = 1.35;
+            // 1) 수량 단위(그램 g, 조각, 슬라이스, 개, 공기 등) 정밀 추출
+            let explicitGrams = null;
+            let explicitCount = null;
+            let unitLabel = "";
+
+            const gMatch = seg.match(/(\d+(?:\.\d+)?)\s*(?:g|그램|ml|미리)/i);
+            if (gMatch) {
+                explicitGrams = parseFloat(gMatch[1]);
+                unitLabel = `${explicitGrams}g`;
             } else {
-                const gMatch = seg.match(/(\d+(?:\.\d+)?)\s*(?:g|그램|ml|미리)/i);
-                const countMatch = seg.match(/(\d+(?:\.\d+)?)\s*(?:개|알|스쿱|스푼|봉|팩|잔|컵|병|캔|공기|그릇|줄|장|조각|마리|인분|접시|세트|모)?/);
-                if (gMatch) {
-                    const grams = parseFloat(gMatch[1]);
-                    if (grams >= 30 && grams <= 1000) {
-                        multiplier = Math.max(0.3, Math.min(4.0, grams / 120));
-                    }
+                const sliceMatch = seg.match(/(\d+(?:\.\d+)?)\s*(?:조각|슬라이스|장|쪽|토막)/);
+                const countMatch = seg.match(/(\d+(?:\.\d+)?)\s*(?:개|알|스쿱|스푼|봉|팩|잔|컵|병|캔|공기|그릇|줄|마리|인분|접시|세트|모|통)/);
+
+                if (sliceMatch) {
+                    explicitCount = parseFloat(sliceMatch[1]);
+                    unitLabel = `${explicitCount}조각`;
                 } else if (countMatch) {
-                    const num = parseFloat(countMatch[1]);
-                    if (num > 0 && num <= 15) {
-                        multiplier = num;
+                    explicitCount = parseFloat(countMatch[1]);
+                    unitLabel = `${explicitCount}개`;
+                } else {
+                    // 한글 수사("한개", "두조각", "스팸 세조각", "반공기") 체크
+                    const korNum = this.parseKoreanNumber(seg.replace(/^[^\d가-힣]+/, ""));
+                    if (korNum !== null) {
+                        explicitCount = korNum;
+                        unitLabel = `${korNum}개`;
                     }
                 }
             }
 
+            // 2) 식품 사전 매칭 (가장 긴 키워드 일치 우선)
             let foundEntry = null;
             let bestKeyLen = 0;
             for (const entry of this.FOOD_DB) {
@@ -730,10 +787,47 @@ export class SmartFoodCalorieEstimator {
             }
 
             if (foundEntry) {
-                // 만두 단품인데 수량 지정이 없으면 기본 4개(1인분 사이드)로 보정
-                if (foundEntry.name.startsWith("만두") && multiplier === 1.0 && !/\d/.test(seg)) {
-                    multiplier = 4;
+                let multiplier = 1.0;
+                let displayQuantityText = "";
+
+                // 스팸 특별 처리 (3조각 = 슬라이스 3개 255kcal, 1캔 = 680kcal, 200g 등)
+                if (foundEntry.isSpam) {
+                    if (explicitGrams !== null) {
+                        multiplier = explicitGrams / 25; // 25g당 1조각
+                        displayQuantityText = ` ${explicitGrams}g`;
+                    } else if (normSeg.includes("캔") || normSeg.includes("통")) {
+                        const canCount = explicitCount || 1;
+                        multiplier = canCount * 8.0; // 200g 1캔 = 8조각 = 680kcal
+                        displayQuantityText = ` ${canCount}캔`;
+                    } else if (explicitCount !== null) {
+                        multiplier = explicitCount;
+                        displayQuantityText = ` ${explicitCount}조각`;
+                    } else {
+                        // 수량 미지정 시 일반 2조각(50g, 170kcal) 기본값
+                        multiplier = 2.0;
+                        displayQuantityText = " 2조각";
+                    }
+                } else if (explicitGrams !== null) {
+                    // 그램(g) 직접 입력 시 해당 음식의 baseGrams 기준 정확 계산
+                    const baseG = foundEntry.baseGrams || 100;
+                    multiplier = explicitGrams / baseG;
+                    displayQuantityText = ` ${explicitGrams}g`;
+                } else if (explicitCount !== null) {
+                    multiplier = explicitCount;
+                    displayQuantityText = ` ${explicitCount}${foundEntry.unit}`;
+                } else {
+                    // 만두 단품인데 수량 지정 없으면 4개 기준
+                    if (foundEntry.name.startsWith("만두")) {
+                        multiplier = 4.0;
+                        displayQuantityText = " 4개";
+                    } else {
+                        multiplier = 1.0;
+                        displayQuantityText = ` 1${foundEntry.unit}`;
+                    }
                 }
+
+                // 배율 정밀 반올림 (소수점 2자리 이하 정돈)
+                multiplier = Math.round(multiplier * 100) / 100;
                 const itemKcal = Math.round(foundEntry.kcal * multiplier);
                 const itemPro = Math.round(foundEntry.pro * multiplier);
                 const itemCarb = Math.round(foundEntry.carb * multiplier);
@@ -744,27 +838,36 @@ export class SmartFoodCalorieEstimator {
                 totalCarb += itemCarb;
                 totalFat += itemFat;
 
-                const multText = multiplier !== 1 ? ` × ${multiplier}${foundEntry.unit}` : "";
-                matchedItems.push(`${foundEntry.name}${multText}(${itemKcal}kcal, 단백질 ${itemPro}g)`);
+                matchedItems.push(`${foundEntry.name}${displayQuantityText}(${itemKcal}kcal, 단백질 ${itemPro}g)`);
             } else {
-                // 사전에 정확히 일치하지 않는 신메뉴/외식 메뉴일 경우 키워드 특징 기반 지능형 평균 추정
-                let estKcal = categoryHint === "BREAKFAST" ? 380 : categoryHint === "DRINK" ? 160 : 820;
-                let estPro = categoryHint === "BREAKFAST" ? 18 : categoryHint === "DRINK" ? 4 : 30;
-                let estCarb = categoryHint === "BREAKFAST" ? 42 : categoryHint === "DRINK" ? 24 : 98;
-                let estFat = categoryHint === "BREAKFAST" ? 14 : categoryHint === "DRINK" ? 5 : 28;
+                // 3) 사전에 없는 음식/반찬 지능형 추정 (밑반찬·조각류 820kcal 할루시네이션 방지)
+                const isSideDish = /김치|나물|반찬|조림|무침|겉절이|단무지|피클|장아찌|소스|드레싱|토핑/.test(normSeg);
+                const isDrink = categoryHint === "DRINK" || /음료|커피|티|라떼|차|수/i.test(normSeg);
+
+                let estKcal = isSideDish ? 40 : isDrink ? 120 : categoryHint === "BREAKFAST" ? 350 : 650;
+                let estPro = isSideDish ? 2 : isDrink ? 3 : categoryHint === "BREAKFAST" ? 16 : 26;
+                let estCarb = isSideDish ? 5 : isDrink ? 20 : categoryHint === "BREAKFAST" ? 40 : 80;
+                let estFat = isSideDish ? 1 : isDrink ? 3 : categoryHint === "BREAKFAST" ? 12 : 22;
 
                 if (/튀김|까스|치킨|버거|피자|탕수육|마라|삼겹/.test(normSeg)) {
-                    estKcal = 960; estPro = 34; estCarb = 104; estFat = 44;
-                } else if (/국밥|탕|전골|찌개|백반|정식|볶음|덮밥|비빔밥/.test(normSeg)) {
-                    estKcal = 860; estPro = 33; estCarb = 102; estFat = 32;
-                } else if (/면|국수|파스타|라멘|우동|짜장|짬뽕/.test(normSeg)) {
-                    estKcal = 810; estPro = 24; estCarb = 116; estFat = 26;
-                } else if (/샐러드|포케|다이어트|식단|클린/.test(normSeg)) {
-                    estKcal = 480; estPro = 32; estCarb = 46; estFat = 16;
-                } else if (/라떼|스무디|프라푸치노|쉐이크|주스|에이드/.test(normSeg)) {
-                    estKcal = 220; estPro = 6; estCarb = 32; estFat = 6;
+                    estKcal = 850; estPro = 32; estCarb = 95; estFat = 38;
+                } else if (/국밥|탕|찌개|백반|볶음|덮밥|비빔밥/.test(normSeg)) {
+                    estKcal = 780; estPro = 30; estCarb = 95; estFat = 28;
+                } else if (/샐러드|포케|식단|클린/.test(normSeg)) {
+                    estKcal = 420; estPro = 28; estCarb = 40; estFat = 14;
                 }
 
+                let multiplier = 1.0;
+                let displayQuantityText = "";
+                if (explicitGrams !== null) {
+                    multiplier = Math.max(0.2, Math.min(5.0, explicitGrams / (isSideDish ? 50 : 250)));
+                    displayQuantityText = ` ${explicitGrams}g`;
+                } else if (explicitCount !== null) {
+                    multiplier = explicitCount;
+                    displayQuantityText = ` ${explicitCount}회`;
+                }
+
+                multiplier = Math.round(multiplier * 100) / 100;
                 const itemKcal = Math.round(estKcal * multiplier);
                 const itemPro = Math.round(estPro * multiplier);
                 const itemCarb = Math.round(estCarb * multiplier);
@@ -775,7 +878,7 @@ export class SmartFoodCalorieEstimator {
                 totalCarb += itemCarb;
                 totalFat += itemFat;
 
-                matchedItems.push(`${seg.trim()} 평균 추정(${itemKcal}kcal, 단백질 ${itemPro}g)`);
+                matchedItems.push(`${seg.trim()}${displayQuantityText}(${itemKcal}kcal, 단백질 ${itemPro}g)`);
             }
         }
 
