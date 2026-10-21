@@ -272,14 +272,6 @@ class GymRatApp {
             });
         }
 
-        const localOnlyBtn = document.getElementById("btn-landing-local-only");
-        if (localOnlyBtn) {
-            localOnlyBtn.addEventListener("click", () => {
-                this.enterMainDashboard();
-                this.showToast("오프라인/로컬 기기 모드로 열렸습니다. 상단 [클라우드 동기화]에서 언제든 연결할 수 있습니다.");
-            });
-        }
-
         // 클라우드 동기화 모달 및 액션 버튼 이벤트
         document.getElementById("btn-open-sync-modal").addEventListener("click", () => {
             this.openCloudSyncModal();
@@ -1407,8 +1399,6 @@ class GymRatApp {
         const bottomNav = document.getElementById("app-bottom-nav");
         const idInput = document.getElementById("landing-input-id");
         const pinInput = document.getElementById("landing-input-pin");
-        const recentBanner = document.getElementById("landing-recent-banner");
-        const recentText = document.getElementById("landing-recent-text");
         const statusBox = document.getElementById("landing-status-box");
 
         if (landingGate) landingGate.classList.remove("hidden");
@@ -1420,14 +1410,9 @@ class GymRatApp {
         if (syncInfo.nickname) {
             if (idInput) idInput.value = syncInfo.nickname;
             if (pinInput) pinInput.value = "";
-            if (recentBanner && recentText) {
-                recentText.textContent = `최근 연결된 아이디 [${syncInfo.nickname}]가 감지되었습니다. PIN 번호(4자리 이상)를 입력하여 접속하세요.`;
-                recentBanner.classList.remove("hidden");
-            }
         } else {
             if (idInput) idInput.value = "";
             if (pinInput) pinInput.value = "";
-            if (recentBanner) recentBanner.classList.add("hidden");
         }
     }
 
@@ -1451,16 +1436,15 @@ class GymRatApp {
         const pin = pinInput ? pinInput.value.trim() : "";
 
         if (!userId || pin.length < 4) {
-            this.setLandingStatus("본인 지정 아이디와 4자리 이상의 PIN 번호를 정확히 입력해주세요.", "error");
+            this.setLandingStatus("아이디와 4자리 이상의 PIN 번호를 입력해주세요.", "error");
             return;
         }
 
-        const originalBtnText = submitBtn ? submitBtn.textContent : "아이디 + PIN으로 시작하기";
         if (submitBtn) {
             submitBtn.disabled = true;
-            submitBtn.textContent = "Firebase Cloud Firestore 연결 중...";
+            submitBtn.textContent = "접속 중...";
         }
-        this.setLandingStatus("Firebase Cloud Firestore에서 개인 클라우드 금고를 조회하고 있습니다...", "info");
+        this.setLandingStatus("", "info");
 
         try {
             const res = await FirebaseSyncService.authenticateWithCloud(userId, pin);
@@ -1469,22 +1453,22 @@ class GymRatApp {
 
             if (res.mode === "RESTORED") {
                 this.showToast(
-                    `[${res.nickname}] 클라우드 계정 연결 완료: 체성분 기록 ${res.recordsCount}건이 동기화되었습니다.`
+                    `[${res.nickname}] 로그인 완료 (저장된 체성분 기록 ${res.recordsCount}건 불러옴)`
                 );
             } else {
                 this.showToast(
-                    `[${res.nickname}] 신규 클라우드 공간 생성 완료. [목표 설정]에서 내 스펙을 설정하세요.`
+                    `[${res.nickname}] 새 계정 생성 완료. [목표 설정]에서 내 스펙을 입력해주세요.`
                 );
             }
         } catch (err) {
             this.setLandingStatus(
-                `클라우드 연결 중 오류가 발생했습니다: ${err.message || "네트워크 상태를 확인하거나 아래 오프라인 모드를 이용해주세요."}`,
+                `접속 오류: ${err.message || "인터넷 연결을 확인한 뒤 다시 시도해주세요."}`,
                 "error"
             );
         } finally {
             if (submitBtn) {
                 submitBtn.disabled = false;
-                submitBtn.textContent = originalBtnText;
+                submitBtn.textContent = "시작하기";
             }
         }
     }
