@@ -128,6 +128,18 @@
                     </div>
                 </div>
 
+                <!-- 직업군 · 근무시간 · 근무형태(좌식/입식) 기반 일평균 칼로리 소모량(TDEE) 분석 박스 -->
+                <div id="tdee-summary-box" class="tdee-info-banner">
+                    <div class="tdee-info-top">
+                        <div>
+                            <strong id="tdee-occupation-title" class="text-lime">직업·근무환경 기반 일평균 소모 칼로리(TDEE)</strong>
+                            <p id="tdee-occupation-sub" class="tdee-sub-line">-</p>
+                        </div>
+                        <button type="button" class="btn-outline-lime js-open-goal-modal">직업·활동량 설정</button>
+                    </div>
+                    <div id="tdee-breakdown-text" class="tdee-breakdown-row"></div>
+                </div>
+
                 <div class="progress-track">
                     <div id="kcal-progress-bar" class="progress-fill bg-blue" style="width: 0%;"></div>
                 </div>
@@ -187,35 +199,40 @@
                 </div>
             </article>
 
-            <!-- 3. 아침/점심 고정 루틴 원클릭 등록 -->
+            <!-- 3. 아침/점심 고정 루틴 원클릭 등록 (식습관 맞춤 계산기 연동) -->
             <article class="card">
-                <h2 class="card-title">원클릭 고정 식단 루틴 등록</h2>
-                <p class="section-sub">매일 반복되는 아침·점심 고정 식단과 부족 단백질 부스터를 원터치로 기록하세요.</p>
+                <div class="card-header-row" style="margin-bottom: 6px;">
+                    <div>
+                        <h2 class="card-title">원클릭 고정 식단 루틴 등록</h2>
+                        <p class="section-sub" style="margin-bottom: 0;">평소 먹는 아침·구내식당 점심·고정 커피 습관을 바탕으로 칼로리를 정확히 계산하고 원터치로 기록하세요.</p>
+                    </div>
+                    <button type="button" id="btn-open-habit-modal" class="btn-outline-lime">식습관 칼로리 계산기</button>
+                </div>
 
-                <div class="routine-list">
+                <div class="routine-list" style="margin-top: 12px;">
                     <div id="routine-card-breakfast" class="routine-item">
                         <div class="routine-info">
-                            <h4>아침 고정 루틴 (계란 3 + 사과 1 + 쉐이크)</h4>
-                            <p>훈제/삶은 계란 3알 + 사과 1개 + 단백질 쉐이크 1스쿱</p>
-                            <span class="routine-badge text-lime">480 kcal · 단백질 40g · 탄수 32g · 지방 18g</span>
+                            <h4 id="routine-title-breakfast">아침 고정 루틴 (계란 3 + 사과 1 + 쉐이크)</h4>
+                            <p id="routine-sub-breakfast">훈제/삶은 계란 3알 + 사과 1개 + 단백질 쉐이크 1스쿱</p>
+                            <span id="routine-badge-breakfast" class="routine-badge text-lime">480 kcal · 단백질 40g · 탄수 32g · 지방 18g</span>
                         </div>
                         <button type="button" id="btn-toggle-breakfast" class="btn-routine-action">원클릭 등록</button>
                     </div>
 
                     <div id="routine-card-lunch" class="routine-item">
                         <div class="routine-info">
-                            <h4>점심 고정 루틴 (구내식당 + 카페라떼)</h4>
-                            <p>구내식당 일반식(약 1,026 kcal) + 카페라떼 음료(174 kcal)</p>
-                            <span class="routine-badge text-blue">1,200 kcal · 단백질 28g · 탄수 148g · 지방 44g</span>
+                            <h4 id="routine-title-lunch">점심 고정 루틴 (구내식당 설렁탕 등 + GS25 바리스타 커피)</h4>
+                            <p id="routine-sub-lunch">구내식당 식사(설렁탕 기준 약 1,100 kcal) + GS25 바리스타 커피(174 kcal)</p>
+                            <span id="routine-badge-lunch" class="routine-badge text-blue">1,274 kcal · 단백질 37g · 탄수 159g · 지방 52g</span>
                         </div>
                         <button type="button" id="btn-toggle-lunch" class="btn-routine-action">원클릭 등록</button>
                     </div>
 
                     <div id="routine-card-booster" class="routine-item">
                         <div class="routine-info">
-                            <h4>단백질 160g 방어용 WPI 쉐이크 1.5스쿱</h4>
-                            <p>아침+점심+저녁 외 부족 단백질(38g) 즉각 보충</p>
-                            <span class="routine-badge text-purple">180 kcal · 단백질 38g · 탄수 3g · 지방 2g</span>
+                            <h4 id="routine-title-booster">단백질 160g 방어용 WPI 쉐이크 1.5스쿱</h4>
+                            <p id="routine-sub-booster">아침+점심+저녁 외 부족 단백질(38g) 즉각 보충</p>
+                            <span id="routine-badge-booster" class="routine-badge text-purple">180 kcal · 단백질 38g · 탄수 3g · 지방 2g</span>
                         </div>
                         <button type="button" id="btn-toggle-booster" class="btn-routine-action">원클릭 등록</button>
                     </div>
@@ -426,36 +443,96 @@
     </div>
 
     <!-- =================================================================
-         모달 2: 맞춤형 목표 설정 (90.0kg / 골격근 41kg 방어 / 체지방률 19~20%)
+         모달 2: 맞춤형 목표 · 성별 · 직업군 · 근무환경(TDEE) 설정
          ================================================================= -->
     <div id="modal-goal-setting" class="modal-backdrop hidden">
-        <div class="modal-card">
-            <h3>내 다이어트 및 근손실 방어 목표 설정</h3>
-            <p class="modal-sub">설정된 목표를 기준으로 매주 가장 안전한 감량 속도(kg/주)가 자동 재계산됩니다.</p>
+        <div class="modal-card modal-card-wide modal-scrollable">
+            <h3>프로필 · 직업군 활동량 · 감량 목표 설정</h3>
+            <p class="modal-sub">성별, 신체 스펙, 하루 근무 시간 및 근무 형태(좌식/입식/직업군)를 선택하면 평균 일일 칼로리 소모량(TDEE)과 권장 섭취 칼로리가 정밀 계산됩니다.</p>
             <form id="form-goal-setting">
-                <div class="form-row-2">
+                <div class="form-section-label">1. 기본 신체 프로필</div>
+                <div class="form-row-3">
                     <div class="form-group">
-                        <label for="input-goal-weight">목표 체중 (kg)</label>
-                        <input type="number" step="0.1" id="input-goal-weight" class="form-input" required />
+                        <label for="input-goal-gender">성별</label>
+                        <select id="input-goal-gender" class="form-input">
+                            <option value="MALE">남성</option>
+                            <option value="FEMALE">여성</option>
+                        </select>
                     </div>
                     <div class="form-group">
-                        <label for="input-goal-muscle">최소 방어 골격근량 (kg)</label>
-                        <input type="number" step="0.1" id="input-goal-muscle" class="form-input" required />
-                    </div>
-                </div>
-                <div class="form-row-2">
-                    <div class="form-group">
-                        <label for="input-goal-fat-pct">목표 체지방률 (%)</label>
-                        <input type="number" step="0.1" id="input-goal-fat-pct" class="form-input" required />
+                        <label for="input-goal-age">나이 (세)</label>
+                        <input type="number" step="1" min="14" max="90" id="input-goal-age" class="form-input" required />
                     </div>
                     <div class="form-group">
                         <label for="input-goal-height">신장 (cm)</label>
                         <input type="number" step="0.1" id="input-goal-height" class="form-input" required />
                     </div>
                 </div>
+
+                <div class="form-section-label">2. 직업군 및 근무 환경 (평균 소모 칼로리 구체화)</div>
+                <div class="form-group">
+                    <label for="input-goal-occupation">직업군 선택</label>
+                    <select id="input-goal-occupation" class="form-input">
+                        <option value="OFFICE_IT">사무직 / IT·개발 / 기획·행정 (모니터·문서 집중)</option>
+                        <option value="RESEARCH_EDU">연구·전문직 / 교사·강사 / 상담 (좌식 + 발표·이동 혼합)</option>
+                        <option value="SALES_SERVICE_MED">영업·매장관리 / 서비스직 / 의료·간호 (지속 응대·보행)</option>
+                        <option value="FIELD_TECH_CHEF">현장 기술·엔지니어 / 제조·정비 / 조리 (지속적 입식·장비 작업)</option>
+                        <option value="HEAVY_LABOR_ATHLETE">건설·물류·배송 / 트레이너 / 고강도 현장직 (중량물·고활동)</option>
+                    </select>
+                </div>
+
+                <div class="form-group">
+                    <label for="input-goal-posture">주된 근무 형태 (좌식 / 입식 / 이동)</label>
+                    <select id="input-goal-posture" class="form-input">
+                        <option value="MOSTLY_SITTING">주로 앉아서 근무 (좌식 80% 이상)</option>
+                        <option value="MIXED_SIT_STAND">앉기와 서서 근무·이동 병행 (약 50:50)</option>
+                        <option value="MOSTLY_STANDING">주로 서서 근무 (입식 70% 이상)</option>
+                        <option value="ACTIVE_WALKING">근무 시간 내내 지속 보행·이동·운반</option>
+                    </select>
+                </div>
+
+                <div class="form-row-3">
+                    <div class="form-group">
+                        <label for="input-goal-work-hours">하루 근무 (시간)</label>
+                        <input type="number" step="0.5" min="0" max="18" id="input-goal-work-hours" class="form-input" required />
+                    </div>
+                    <div class="form-group">
+                        <label for="input-goal-work-days">주간 근무 (일)</label>
+                        <input type="number" step="1" min="0" max="7" id="input-goal-work-days" class="form-input" required />
+                    </div>
+                    <div class="form-group">
+                        <label for="input-goal-workout-days">주간 운동 목표 (회)</label>
+                        <input type="number" step="1" min="0" max="7" id="input-goal-workout-days" class="form-input" required />
+                    </div>
+                </div>
+
+                <!-- 실시간 산출된 소모 칼로리(TDEE) & 권장 목표 칼로리 박스 -->
+                <div id="goal-tdee-preview-box" class="tdee-preview-card">
+                    <div class="tdee-preview-header">
+                        <strong id="goal-tdee-total-text" class="text-lime">일평균 총 소모량(TDEE): - kcal</strong>
+                        <button type="button" id="btn-apply-recommended-kcal" class="btn-apply-mini">권장 섭취량 적용</button>
+                    </div>
+                    <p id="goal-tdee-detail-text" class="tdee-preview-sub">-</p>
+                </div>
+
+                <div class="form-section-label">3. 체성분 감량 및 일일 영양 목표</div>
+                <div class="form-row-3">
+                    <div class="form-group">
+                        <label for="input-goal-weight">목표 체중 (kg)</label>
+                        <input type="number" step="0.1" id="input-goal-weight" class="form-input" required />
+                    </div>
+                    <div class="form-group">
+                        <label for="input-goal-muscle">방어 골격근 (kg)</label>
+                        <input type="number" step="0.1" id="input-goal-muscle" class="form-input" required />
+                    </div>
+                    <div class="form-group">
+                        <label for="input-goal-fat-pct">목표 체지방률 (%)</label>
+                        <input type="number" step="0.1" id="input-goal-fat-pct" class="form-input" required />
+                    </div>
+                </div>
                 <div class="form-row-2">
                     <div class="form-group">
-                        <label for="input-goal-kcal">일일 목표 칼로리 (kcal)</label>
+                        <label for="input-goal-kcal">일일 목표 섭취 칼로리 (kcal)</label>
                         <input type="number" step="10" id="input-goal-kcal" class="form-input" required />
                     </div>
                     <div class="form-group">
@@ -465,7 +542,7 @@
                 </div>
                 <div class="modal-actions">
                     <button type="button" class="btn-cancel js-close-modal">취소</button>
-                    <button type="submit" class="btn-submit">목표 저장</button>
+                    <button type="submit" class="btn-submit">프로필 및 목표 저장</button>
                 </div>
             </form>
         </div>
@@ -551,6 +628,105 @@
                 <button type="button" class="btn-outline-lime js-open-goal-from-roadmap">목표 수치 변경</button>
                 <button type="button" class="btn-submit js-close-modal">닫기</button>
             </div>
+        </div>
+    </div>
+
+    <!-- =================================================================
+         모달 5: 식습관 기반 나만의 고정 식단 칼로리 계산기
+         (예: 아침 계란3+사과1 / 점심 구내식당 설렁탕 1,100kcal + GS25 바리스타 커피 174kcal)
+         ================================================================= -->
+    <div id="modal-habit-builder" class="modal-backdrop hidden">
+        <div class="modal-card modal-card-wide modal-scrollable">
+            <h3>식습관 기반 나만의 고정 식단 칼로리 계산기</h3>
+            <p class="modal-sub">
+                평소 아침 식사(예: 계란 3개 + 사과 1개), 점심 구내식당/외식 메뉴(예: 설렁탕 약 1,100kcal), 고정 음료(예: GS25 바리스타 커피 174kcal)를 선택하거나 직접 입력하면, 하루 고정 섭취량과 저녁에 허용된 잔여 칼로리·단백질을 자동으로 계산해 원클릭 루틴으로 등록합니다.
+            </p>
+
+            <form id="form-habit-builder">
+                <div class="form-section-label">1. 아침 식습관 선택 및 칼로리 보정</div>
+                <div class="form-group">
+                    <label for="select-habit-breakfast">평소 아침 식사 유형</label>
+                    <select id="select-habit-breakfast" class="form-input"></select>
+                </div>
+                <div class="form-group">
+                    <label for="input-habit-bf-title">아침 고정 루틴 이름</label>
+                    <input type="text" id="input-habit-bf-title" class="form-input" required />
+                </div>
+                <div class="form-row-4">
+                    <div class="form-group">
+                        <label for="input-habit-bf-kcal">칼로리 (kcal)</label>
+                        <input type="number" step="5" id="input-habit-bf-kcal" class="form-input" required />
+                    </div>
+                    <div class="form-group">
+                        <label for="input-habit-bf-pro">단백질 (g)</label>
+                        <input type="number" step="1" id="input-habit-bf-pro" class="form-input" required />
+                    </div>
+                    <div class="form-group">
+                        <label for="input-habit-bf-carb">탄수화물 (g)</label>
+                        <input type="number" step="1" id="input-habit-bf-carb" class="form-input" required />
+                    </div>
+                    <div class="form-group">
+                        <label for="input-habit-bf-fat">지방 (g)</label>
+                        <input type="number" step="1" id="input-habit-bf-fat" class="form-input" required />
+                    </div>
+                </div>
+
+                <div class="form-section-label">2. 점심 식습관 (구내식당·외식 어림 계산)</div>
+                <div class="form-group">
+                    <label for="select-habit-lunch-main">점심 주메뉴 유형 (예: 구내식당 설렁탕 약 1,100kcal)</label>
+                    <select id="select-habit-lunch-main" class="form-input"></select>
+                </div>
+                <div class="form-row-4">
+                    <div class="form-group">
+                        <label for="input-habit-lc-kcal">점심 식사 (kcal)</label>
+                        <input type="number" step="10" id="input-habit-lc-kcal" class="form-input" required />
+                    </div>
+                    <div class="form-group">
+                        <label for="input-habit-lc-pro">단백질 (g)</label>
+                        <input type="number" step="1" id="input-habit-lc-pro" class="form-input" required />
+                    </div>
+                    <div class="form-group">
+                        <label for="input-habit-lc-carb">탄수화물 (g)</label>
+                        <input type="number" step="1" id="input-habit-lc-carb" class="form-input" required />
+                    </div>
+                    <div class="form-group">
+                        <label for="input-habit-lc-fat">지방 (g)</label>
+                        <input type="number" step="1" id="input-habit-lc-fat" class="form-input" required />
+                    </div>
+                </div>
+
+                <div class="form-section-label">3. 고정 커피·음료 습관 (점심 합산)</div>
+                <div class="form-group">
+                    <label for="select-habit-drink">매일 마시는 고정 커피·음료 (예: GS25 바리스타 커피 174kcal)</label>
+                    <select id="select-habit-drink" class="form-input"></select>
+                </div>
+                <div class="form-row-4">
+                    <div class="form-group">
+                        <label for="input-habit-dr-kcal">음료 칼로리 (kcal)</label>
+                        <input type="number" step="1" id="input-habit-dr-kcal" class="form-input" required />
+                    </div>
+                    <div class="form-group">
+                        <label for="input-habit-dr-pro">단백질 (g)</label>
+                        <input type="number" step="1" id="input-habit-dr-pro" class="form-input" required />
+                    </div>
+                    <div class="form-group">
+                        <label for="input-habit-dr-carb">탄수화물 (g)</label>
+                        <input type="number" step="1" id="input-habit-dr-carb" class="form-input" required />
+                    </div>
+                    <div class="form-group">
+                        <label for="input-habit-dr-fat">지방 (g)</label>
+                        <input type="number" step="1" id="input-habit-dr-fat" class="form-input" required />
+                    </div>
+                </div>
+
+                <!-- 아침 + 점심 + 고정 음료 합산 및 저녁 잔여 칼로리/단백질 자동 역산 결과 -->
+                <div id="habit-calc-result-box" class="tdee-preview-card"></div>
+
+                <div class="modal-actions">
+                    <button type="button" class="btn-cancel js-close-modal">취소</button>
+                    <button type="submit" class="btn-submit">내 고정 식단 루틴으로 적용</button>
+                </div>
+            </form>
         </div>
     </div>
 

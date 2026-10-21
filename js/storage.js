@@ -8,11 +8,183 @@ import { getLocalDateString } from "./calculator.js";
 const STORAGE_KEYS = {
     PROFILE: "gymrat_user_profile_v1",
     PROFILE_BACKUP: "gymrat_user_profile_backup",
+    CUSTOM_ROUTINES: "gymrat_custom_routines_v1",
+    CUSTOM_ROUTINES_BACKUP: "gymrat_custom_routines_backup",
     WEIGHT_RECORDS: "gymrat_weight_records_v1",
     WEIGHT_RECORDS_BACKUP: "gymrat_weight_records_backup",
     DIET_RECORDS: "gymrat_diet_records_v1",
     WORKOUT_RECORDS: "gymrat_workout_records_v1",
     DAILY_CHECKLISTS: "gymrat_daily_checklists_v1"
+};
+
+export const DEFAULT_USER_PROFILE = {
+    gender: "MALE",
+    age: 32,
+    heightCm: 184.0,
+    startWeightKg: 104.40,
+    currentWeightKg: 104.40,
+    targetWeightKg: 90.0,
+    startSkeletalMuscleKg: 42.80,
+    minTargetSkeletalMuscleKg: 41.0,
+    startBodyFatPercent: 28.6,
+    targetBodyFatPercent: 19.5,
+    occupationCode: "OFFICE_IT",
+    workPostureCode: "MOSTLY_SITTING",
+    dailyWorkHours: 8.0,
+    weeklyWorkDays: 5,
+    weeklyWorkoutTargetDays: 4,
+    dailyTargetCalories: 2250,
+    dailyTargetProteinG: 160,
+    dailyTargetCarbsG: 210,
+    dailyTargetFatG: 85,
+    dailyTargetWaterMl: 2800
+};
+
+/**
+ * 사용자의 식습관을 기반으로 아침·점심·고정음료 칼로리를 쉽게 어림 계산할 수 있는 프리셋 카탈로그
+ */
+export const HabitMealCatalog = {
+    BREAKFAST_PRESETS: [
+        {
+            code: "BF_EGG3_APPLE1_SHAKE",
+            label: "계란 3개 + 사과 1개 + 단백질 쉐이크 1스쿱",
+            detail: "훈제/삶은 계란 3알(210kcal) + 사과 1개(110kcal) + 단백질 쉐이크(160kcal)",
+            caloriesKcal: 480,
+            proteinG: 40,
+            carbsG: 32,
+            fatG: 18
+        },
+        {
+            code: "BF_EGG3_APPLE1",
+            label: "계란 3개 + 사과 1개 (쉐이크 제외)",
+            detail: "훈제/삶은 계란 3알(210kcal) + 사과 1개(110kcal)",
+            caloriesKcal: 320,
+            proteinG: 19,
+            carbsG: 30,
+            fatG: 15
+        },
+        {
+            code: "BF_EGG2_BANANA_SOY",
+            label: "계란 2개 + 바나나 1개 + 무가당 두유",
+            detail: "계란 2알(140kcal) + 바나나 1개(105kcal) + 두유 1팩(95kcal)",
+            caloriesKcal: 340,
+            proteinG: 21,
+            carbsG: 34,
+            fatG: 13
+        },
+        {
+            code: "BF_GREEK_OAT",
+            label: "그릭요거트 150g + 오트밀 40g + 견과류",
+            detail: "고단백 그릭요거트 + 오트밀 간편 아침식",
+            caloriesKcal: 360,
+            proteinG: 22,
+            carbsG: 38,
+            fatG: 12
+        },
+        {
+            code: "BF_SKIP",
+            label: "아침 식사 생략 (간헐적 단식 / 공복 유지)",
+            detail: "아침 물·블랙커피 외 칼로리 섭취 없음",
+            caloriesKcal: 0,
+            proteinG: 0,
+            carbsG: 0,
+            fatG: 0
+        }
+    ],
+    LUNCH_MAIN_PRESETS: [
+        {
+            code: "LC_CAFETERIA_SEOLLEONGTANG",
+            label: "구내식당 설렁탕·국밥류 기준 (밥 1공기 포함)",
+            detail: "설렁탕/곰탕/국밥 등 구내식당 국물 메뉴 평균 (약 1,100 kcal)",
+            caloriesKcal: 1100,
+            proteinG: 32,
+            carbsG: 135,
+            fatG: 46
+        },
+        {
+            code: "LC_CAFETERIA_STANDARD",
+            label: "구내식당 일반 백반 정식 (밥 + 국 + 반찬 3~4종)",
+            detail: "표준 구내식당 한식 백반 평균 (약 950 kcal)",
+            caloriesKcal: 950,
+            proteinG: 28,
+            carbsG: 125,
+            fatG: 36
+        },
+        {
+            code: "LC_CAFETERIA_SPECIAL",
+            label: "구내식당 돈까스·제육·튀김류 특식",
+            detail: "튀김/볶음 위주 구내식당 고칼로리 메뉴 (약 1,200 kcal)",
+            caloriesKcal: 1200,
+            proteinG: 34,
+            carbsG: 138,
+            fatG: 56
+        },
+        {
+            code: "LC_OUT_KOREAN",
+            label: "일반 식당 외식 (김치찌개·된장찌개·비빔밥·덮밥)",
+            detail: "직장인 점심 일반 한식당 외식 평균 (약 900 kcal)",
+            caloriesKcal: 900,
+            proteinG: 26,
+            carbsG: 118,
+            fatG: 34
+        },
+        {
+            code: "LC_DIET_BOX_SALAD",
+            label: "다이어트 도시락 / 포케 / 닭가슴살 샐러드",
+            detail: "탄수화물 절제형 클린 점심 식단 (약 550 kcal)",
+            caloriesKcal: 550,
+            proteinG: 36,
+            carbsG: 55,
+            fatG: 18
+        }
+    ],
+    FIXED_DRINK_PRESETS: [
+        {
+            code: "DR_GS25_BARISTA_174",
+            label: "GS25 바리스타 커피 (250ml 컵커피)",
+            detail: "편의점 바리스타 로슈거/에스프레소 라떼 기준 (174 kcal)",
+            caloriesKcal: 174,
+            proteinG: 5,
+            carbsG: 24,
+            fatG: 6
+        },
+        {
+            code: "DR_CAFE_LATTE",
+            label: "일반 카페라떼 (톨/레귤러 사이즈, 시럽 없음)",
+            detail: "우유 + 에스프레소 카페라떼 1잔 (180 kcal)",
+            caloriesKcal: 180,
+            proteinG: 9,
+            carbsG: 14,
+            fatG: 9
+        },
+        {
+            code: "DR_SWEET_LATTE",
+            label: "바닐라라떼 / 연유라떼 / 카라멜마키아또",
+            detail: "시럽·연유 포함 달콤한 커피 음료 1잔 (270 kcal)",
+            caloriesKcal: 270,
+            proteinG: 8,
+            carbsG: 38,
+            fatG: 9
+        },
+        {
+            code: "DR_PROTEIN_RTD",
+            label: "편의점 단백질 음료 1팩 (더단백·셀렉스 등)",
+            detail: "RTD 단백질 드링크 250ml 1팩 (145 kcal / 단백질 20g)",
+            caloriesKcal: 145,
+            proteinG: 20,
+            carbsG: 6,
+            fatG: 3
+        },
+        {
+            code: "DR_AMERICANO_ZERO",
+            label: "아메리카노 / 제로 칼로리 음료 / 물",
+            detail: "당류·지방 없는 무칼로리 음료 (5 kcal)",
+            caloriesKcal: 5,
+            proteinG: 0,
+            carbsG: 1,
+            fatG: 0
+        }
+    ]
 };
 
 export const FixedRoutineTemplates = {
@@ -32,20 +204,20 @@ export const FixedRoutineTemplates = {
         templateCode: "FIXED_LUNCH_CAFETERIA_LATTE",
         mealType: "LUNCH",
         mealLabel: "점심",
-        title: "점심 고정 루틴 (구내식당 + 카페라떼)",
-        subtitle: "구내식당 일반식(약 1,026 kcal) + 아이스/핫 카페라떼(174 kcal)",
-        badgeText: "고정 템플릿 · 1,200 kcal / 단백질 28g",
-        caloriesKcal: 1200,
-        carbsG: 148,
-        proteinG: 28,
-        fatG: 44
+        title: "점심 고정 루틴 (구내식당 설렁탕 등 + GS25 바리스타 커피)",
+        subtitle: "구내식당 식사(설렁탕 기준 약 1,100 kcal) + GS25 바리스타 커피(174 kcal)",
+        badgeText: "고정 템플릿 · 1,274 kcal / 단백질 37g",
+        caloriesKcal: 1274,
+        carbsG: 159,
+        proteinG: 37,
+        fatG: 52
     },
     EXTRA_PROTEIN_BOOSTER: {
         templateCode: "BOOSTER_WHEY_ISOLATE_1SCOOP",
         mealType: "SNACK",
         mealLabel: "보충",
         title: "단백질 160g 방어용 WPI 쉐이크 1.5스쿱",
-        subtitle: "아침(40g)+점심(28g)+저녁(54g)=122g 외 부족 단백질(38g) 즉각 보충",
+        subtitle: "아침·점심·저녁 외 부족 단백질(38g) 즉각 보충",
         badgeText: "근손실 방어 부스터 · 180 kcal / 단백질 38g",
         caloriesKcal: 180,
         carbsG: 3,
@@ -181,28 +353,35 @@ export class GymRatStorage {
         const backupProfile = safeParseObject(localStorage.getItem(STORAGE_KEYS.PROFILE_BACKUP));
 
         if (!primaryProfile && !backupProfile) {
-            const defaultProfile = {
-                heightCm: 184.0,
-                startWeightKg: 104.40,
-                currentWeightKg: 104.40,
-                targetWeightKg: 90.0,
-                startSkeletalMuscleKg: 42.80,
-                minTargetSkeletalMuscleKg: 41.0,
-                startBodyFatPercent: 28.6,
-                targetBodyFatPercent: 19.5,
-                dailyTargetCalories: 2250,
-                dailyTargetProteinG: 160,
-                dailyTargetCarbsG: 210,
-                dailyTargetFatG: 85,
-                dailyTargetWaterMl: 2800
-            };
-            const serialized = JSON.stringify(defaultProfile);
+            const serialized = JSON.stringify(DEFAULT_USER_PROFILE);
             localStorage.setItem(STORAGE_KEYS.PROFILE, serialized);
             localStorage.setItem(STORAGE_KEYS.PROFILE_BACKUP, serialized);
-        } else if (!primaryProfile && backupProfile) {
-            localStorage.setItem(STORAGE_KEYS.PROFILE, JSON.stringify(backupProfile));
-        } else if (primaryProfile && !backupProfile) {
-            localStorage.setItem(STORAGE_KEYS.PROFILE_BACKUP, JSON.stringify(primaryProfile));
+        } else {
+            const baseProf = primaryProfile || backupProfile;
+            const mergedProfile = { ...DEFAULT_USER_PROFILE, ...baseProf };
+            const serialized = JSON.stringify(mergedProfile);
+            localStorage.setItem(STORAGE_KEYS.PROFILE, serialized);
+            localStorage.setItem(STORAGE_KEYS.PROFILE_BACKUP, serialized);
+        }
+
+        const primaryRoutines = safeParseObject(localStorage.getItem(STORAGE_KEYS.CUSTOM_ROUTINES));
+        const backupRoutines = safeParseObject(localStorage.getItem(STORAGE_KEYS.CUSTOM_ROUTINES_BACKUP));
+        if (!primaryRoutines && !backupRoutines) {
+            const defaultCustomRoutines = {
+                breakfastPresetCode: "BF_EGG3_APPLE1_SHAKE",
+                lunchMainPresetCode: "LC_CAFETERIA_SEOLLEONGTANG",
+                fixedDrinkPresetCode: "DR_GS25_BARISTA_174",
+                BREAKFAST_FIXED: { ...FixedRoutineTemplates.BREAKFAST_FIXED },
+                LUNCH_FIXED: { ...FixedRoutineTemplates.LUNCH_FIXED },
+                EXTRA_PROTEIN_BOOSTER: { ...FixedRoutineTemplates.EXTRA_PROTEIN_BOOSTER }
+            };
+            const routineStr = JSON.stringify(defaultCustomRoutines);
+            localStorage.setItem(STORAGE_KEYS.CUSTOM_ROUTINES, routineStr);
+            localStorage.setItem(STORAGE_KEYS.CUSTOM_ROUTINES_BACKUP, routineStr);
+        } else if (!primaryRoutines && backupRoutines) {
+            localStorage.setItem(STORAGE_KEYS.CUSTOM_ROUTINES, JSON.stringify(backupRoutines));
+        } else if (primaryRoutines && !backupRoutines) {
+            localStorage.setItem(STORAGE_KEYS.CUSTOM_ROUTINES_BACKUP, JSON.stringify(primaryRoutines));
         }
 
         const primaryWeights = safeParseArray(localStorage.getItem(STORAGE_KEYS.WEIGHT_RECORDS)) || [];
@@ -264,14 +443,83 @@ export class GymRatStorage {
 
     static getProfile() {
         this.ensureSeeded();
-        return safeParseObject(localStorage.getItem(STORAGE_KEYS.PROFILE)) ||
-            safeParseObject(localStorage.getItem(STORAGE_KEYS.PROFILE_BACKUP));
+        const saved = safeParseObject(localStorage.getItem(STORAGE_KEYS.PROFILE)) ||
+            safeParseObject(localStorage.getItem(STORAGE_KEYS.PROFILE_BACKUP)) ||
+            {};
+        return { ...DEFAULT_USER_PROFILE, ...saved };
     }
 
     static saveProfile(profile) {
-        const serialized = JSON.stringify(profile);
+        const merged = { ...DEFAULT_USER_PROFILE, ...profile };
+        const serialized = JSON.stringify(merged);
         localStorage.setItem(STORAGE_KEYS.PROFILE, serialized);
         localStorage.setItem(STORAGE_KEYS.PROFILE_BACKUP, serialized);
+    }
+
+    static getCustomRoutines() {
+        this.ensureSeeded();
+        const saved = safeParseObject(localStorage.getItem(STORAGE_KEYS.CUSTOM_ROUTINES)) ||
+            safeParseObject(localStorage.getItem(STORAGE_KEYS.CUSTOM_ROUTINES_BACKUP));
+        if (!saved) {
+            return {
+                breakfastPresetCode: "BF_EGG3_APPLE1_SHAKE",
+                lunchMainPresetCode: "LC_CAFETERIA_SEOLLEONGTANG",
+                fixedDrinkPresetCode: "DR_GS25_BARISTA_174",
+                BREAKFAST_FIXED: { ...FixedRoutineTemplates.BREAKFAST_FIXED },
+                LUNCH_FIXED: { ...FixedRoutineTemplates.LUNCH_FIXED },
+                EXTRA_PROTEIN_BOOSTER: { ...FixedRoutineTemplates.EXTRA_PROTEIN_BOOSTER }
+            };
+        }
+        return {
+            breakfastPresetCode: saved.breakfastPresetCode || "BF_EGG3_APPLE1_SHAKE",
+            lunchMainPresetCode: saved.lunchMainPresetCode || "LC_CAFETERIA_SEOLLEONGTANG",
+            fixedDrinkPresetCode: saved.fixedDrinkPresetCode || "DR_GS25_BARISTA_174",
+            BREAKFAST_FIXED: { ...FixedRoutineTemplates.BREAKFAST_FIXED, ...(saved.BREAKFAST_FIXED || {}) },
+            LUNCH_FIXED: { ...FixedRoutineTemplates.LUNCH_FIXED, ...(saved.LUNCH_FIXED || {}) },
+            EXTRA_PROTEIN_BOOSTER: { ...FixedRoutineTemplates.EXTRA_PROTEIN_BOOSTER, ...(saved.EXTRA_PROTEIN_BOOSTER || {}) }
+        };
+    }
+
+    static saveCustomRoutines(customRoutines, dateStrToSync = null) {
+        const current = this.getCustomRoutines();
+        const merged = {
+            ...current,
+            ...customRoutines
+        };
+        const serialized = JSON.stringify(merged);
+        localStorage.setItem(STORAGE_KEYS.CUSTOM_ROUTINES, serialized);
+        localStorage.setItem(STORAGE_KEYS.CUSTOM_ROUTINES_BACKUP, serialized);
+
+        // 오늘 이미 등록된 고정 식단 루틴이 있다면 수정된 칼로리/영양소 수치로 즉시 동기화
+        if (dateStrToSync) {
+            const allDiets = safeParseArray(localStorage.getItem(STORAGE_KEYS.DIET_RECORDS)) || [];
+            let updated = false;
+            const templatesByCode = new Map([
+                [merged.BREAKFAST_FIXED.templateCode, merged.BREAKFAST_FIXED],
+                [merged.LUNCH_FIXED.templateCode, merged.LUNCH_FIXED],
+                [merged.EXTRA_PROTEIN_BOOSTER.templateCode, merged.EXTRA_PROTEIN_BOOSTER]
+            ]);
+            const nextDiets = allDiets.map(d => {
+                if (d.recordDate === dateStrToSync && templatesByCode.has(d.templateCode)) {
+                    const tpl = templatesByCode.get(d.templateCode);
+                    updated = true;
+                    return {
+                        ...d,
+                        title: tpl.title,
+                        subtitle: tpl.subtitle,
+                        caloriesKcal: Number(tpl.caloriesKcal),
+                        carbsG: Number(tpl.carbsG),
+                        proteinG: Number(tpl.proteinG),
+                        fatG: Number(tpl.fatG)
+                    };
+                }
+                return d;
+            });
+            if (updated) {
+                localStorage.setItem(STORAGE_KEYS.DIET_RECORDS, JSON.stringify(nextDiets));
+            }
+        }
+        return merged;
     }
 
     static getWeightRecords() {
