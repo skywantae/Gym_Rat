@@ -20,6 +20,7 @@
                 <h1>GymRat</h1>
             </div>
             <div class="header-actions">
+                <button type="button" id="btn-open-sync-modal" class="btn-outline-lime">클라우드 동기화</button>
                 <button type="button" class="btn-outline-lime js-open-goal-modal">목표 설정</button>
                 <button type="button" class="btn-primary-orange js-open-body-modal">오늘 체성분 입력</button>
             </div>
@@ -725,6 +726,44 @@
                 <div class="modal-actions">
                     <button type="button" class="btn-cancel js-close-modal">취소</button>
                     <button type="submit" class="btn-submit">내 고정 식단 루틴으로 적용</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- =================================================================
+         모달 6: Firebase Cloud Firestore 하이브리드 동기화 (방법 C)
+         ================================================================= -->
+    <div id="modal-cloud-sync" class="modal-backdrop hidden">
+        <div class="modal-card">
+            <h3>Firebase 클라우드 동기화 (기기 간 백업 & 복원)</h3>
+            <p class="modal-sub">
+                회원가입 없이 나만의 닉네임과 4자리 이상 PIN 번호로 Firebase Cloud Firestore에 암호화된 스냅샷을 백업하고, 다른 스마트폰이나 PC에서 복원해 사용할 수 있습니다.
+            </p>
+
+            <div id="cloud-sync-status-card" class="tdee-preview-card" style="margin-bottom: 14px;">
+                <div class="tdee-preview-header">
+                    <strong id="sync-status-title" class="text-lime">연결 상태: 로컬 기기 단독 사용 중</strong>
+                    <button type="button" id="btn-sync-unlink" class="btn-cancel" style="padding: 4px 8px; font-size: 11px; display: none;">연결 해제</button>
+                </div>
+                <p id="sync-status-desc" class="tdee-preview-sub">
+                    동기화 닉네임과 PIN을 입력하여 클라우드에 백업하거나, 다른 기기에서 백업한 기록을 가져오세요.
+                </p>
+            </div>
+
+            <form id="form-cloud-sync">
+                <div class="form-group">
+                    <label for="input-sync-nickname">동기화 닉네임 (영문/한글/숫자)</label>
+                    <input type="text" id="input-sync-nickname" class="form-input" placeholder="예: skywantae" required />
+                </div>
+                <div class="form-group">
+                    <label for="input-sync-pin">동기화 PIN 번호 (4자리 이상)</label>
+                    <input type="password" id="input-sync-pin" class="form-input" placeholder="비밀번호 4자리 이상 입력" required />
+                </div>
+                <div class="modal-actions" style="display: flex; gap: 8px; justify-content: flex-end; margin-top: 18px;">
+                    <button type="button" class="btn-cancel js-close-modal">닫기</button>
+                    <button type="button" id="btn-action-restore" class="btn-outline-lime" style="padding: 9px 14px; font-size: 13px;">클라우드에서 복원</button>
+                    <button type="button" id="btn-action-backup" class="btn-submit">클라우드에 백업</button>
                 </div>
             </form>
         </div>

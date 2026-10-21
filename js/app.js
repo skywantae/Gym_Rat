@@ -8,6 +8,7 @@
 import { SafeWeightLossCalculator, getLocalDateString } from "./calculator.js";
 import { GymRatStorage, FixedRoutineTemplates, HabitMealCatalog, MachinePresets } from "./storage.js";
 import { GymRatCharts } from "./chart.js";
+import { FirebaseSyncService } from "./firebase-sync.js";
 
 class GymRatApp {
     constructor() {
@@ -239,6 +240,23 @@ class GymRatApp {
             }
         });
 
+        // 클라우드 동기화 모달 및 액션 버튼 이벤트
+        document.getElementById("btn-open-sync-modal").addEventListener("click", () => {
+            this.openCloudSyncModal();
+        });
+
+        document.getElementById("btn-action-backup").addEventListener("click", () => {
+            this.handleCloudBackup();
+        });
+
+        document.getElementById("btn-action-restore").addEventListener("click", () => {
+            this.handleCloudRestore();
+        });
+
+        document.getElementById("btn-sync-unlink").addEventListener("click", () => {
+            this.handleCloudUnlink();
+        });
+
         // 웨이트 세트 저장 폼 제출
         document.getElementById("form-workout-set").addEventListener("submit", e => {
             e.preventDefault();
@@ -380,6 +398,19 @@ class GymRatApp {
         const checklist = GymRatStorage.getChecklist(this.todayStr);
         const workouts = GymRatStorage.getWorkoutRecordsByDate(this.todayStr);
         const weeklyWorkoutDays = GymRatStorage.getWeeklyWorkoutDaysCount(this.todayStr);
+
+        // 상단 클라우드 동기화 상태 배지 반영
+        const syncInfo = FirebaseSyncService.getActiveSyncInfo();
+        const syncBtn = document.getElementById("btn-open-sync-modal");
+        if (syncBtn) {
+            if (syncInfo.nickname) {
+                syncBtn.textContent = `클라우드: ${syncInfo.nickname}`;
+                syncBtn.className = "btn-outline-lime active";
+            } else {
+                syncBtn.textContent = "클라우드 동기화";
+                syncBtn.className = "btn-outline-lime";
+            }
+        }
 
         // 1. 앳플리 스타일 상단 몸무게 & 이번 주 감량 목표 박스 업데이트
         const hasRecords = weightRecords.length > 0;
@@ -978,6 +1009,7 @@ class GymRatApp {
         this.selectedChartPointIndex = updatedList.length - 1;
         this.closeAllModals();
         this.renderAll();
+        FirebaseSyncService.autoSyncIfActive();
         this.showToast(
             `${recordDate} 체성분 기록 반영 완료: ${weightKg.toFixed(2)}kg (총 ${updatedList.length}건 기록 보존)`
         );
@@ -1064,6 +1096,7 @@ class GymRatApp {
         GymRatStorage.saveProfile(profile);
         this.closeAllModals();
         this.renderAll();
+        FirebaseSyncService.autoSyncIfActive();
         this.showToast(
             `프로필·직업 활동량·목표 저장 완료: 일일 목표 ${profile.dailyTargetCalories.toLocaleString()} kcal · 목표 체중 ${profile.targetWeightKg}kg`
         );
@@ -1243,6 +1276,7 @@ class GymRatApp {
 
         this.closeAllModals();
         this.renderDashboardScreen();
+        FirebaseSyncService.autoSyncIfActive();
         this.showToast(
             `맞춤 식습관 루틴 적용 완료: 아침 ${bfKcal.toLocaleString()}kcal / 점심+음료 ${lunchCombinedKcal.toLocaleString()}kcal`
         );
@@ -1309,6 +1343,100 @@ class GymRatApp {
         checklist.waterIntakeMl = Math.max(0, Math.min(6000, Number(checklist.waterIntakeMl) + deltaMl));
         GymRatStorage.saveChecklist(this.todayStr, checklist);
         this.renderDashboardScreen();
+    }
+
+    /**
+     * Firebase Cloud Firestore 하이브리드 동기화 모달 (방법 C)
+     */
+    openCloudSyncModal() {
+        const syncInfo = FirebaseSyncService.getActiveSyncInfo();
+        const nickInput = document.getElementById("input-sync-nickname");
+        const pinInput = document.getElementById("input-sync-pin");
+        const titleEl = document.getElementById("sync-status-title");
+        const descEl = document.getElementById("sync-status-desc");
+        const unlinkBtn = document.getElementById("btn-sync-unlink");
+
+        if (syncInfo.nickname) {
+            nickInput.value = syncInfo.nickname;
+            pinInput.value = "";
+            titleEl.textContent = `연결 상태: [${syncInfo.nickname}] 클라우드 동기화 활성화됨`;
+            titleEl.className = "text-lime";
+            const lastTimeStr = syncInfo.lastSyncTimestamp
+                ? new Date(syncInfo.lastSyncTimestamp).toLocaleString()
+                : "최근 동기화 없음";
+            descEl.innerHTML = `현재 이 기기는 <strong>${syncInfo.nickname}</strong> 계정으로 Firebase Cloud Firestore와 연결되어 있습니다.<br/>최근 동기화 시각: ${lastTimeStr}`;
+            unlinkBtn.style.display = "inline-block";
+        } else {
+            nickInput.value = "";
+            pinInput.value = "";
+            titleEl.textContent = "연결 상태: 로컬 기기 단독 사용 중";
+            titleEl.className = "text-blue";
+            descEl.textContent = "동기화 닉네임과 PIN 번호(4자리 이상)를 입력하여 클라우드에 백업하거나 다른 기기의 기록을 불러오세요.";
+            unlinkBtn.style.display = "none";
+        }
+
+        document.getElementById("modal-cloud-sync").classList.remove("hidden");
+    }
+
+    async handleCloudBackup() {
+        const nick = document.getElementById("input-sync-nickname").value.trim();
+        const pin = document.getElementById("input-sync-pin").value.trim();
+
+        if (!nick || pin.length < 4) {
+            this.showToast("닉네임과 4자리 이상의 PIN 번호를 입력해주세요.");
+            return;
+        }
+
+        const backupBtn = document.getElementById("btn-action-backup");
+        const originalText = backupBtn.textContent;
+        backupBtn.disabled = true;
+        backupBtn.textContent = "백업 중...";
+
+        try {
+            const res = await FirebaseSyncService.backupToCloud(nick, pin);
+            this.renderDashboardScreen();
+            this.openCloudSyncModal();
+            this.showToast(`Firebase 클라우드 백업 완료: 총 ${res.recordsCount}건 체성분 기록이 보관되었습니다.`);
+        } catch (err) {
+            this.showToast(`클라우드 백업 실패: ${err.message || "네트워크 오류"}`);
+        } finally {
+            backupBtn.disabled = false;
+            backupBtn.textContent = originalText;
+        }
+    }
+
+    async handleCloudRestore() {
+        const nick = document.getElementById("input-sync-nickname").value.trim();
+        const pin = document.getElementById("input-sync-pin").value.trim();
+
+        if (!nick || pin.length < 4) {
+            this.showToast("닉네임과 4자리 이상의 PIN 번호를 입력해주세요.");
+            return;
+        }
+
+        const restoreBtn = document.getElementById("btn-action-restore");
+        const originalText = restoreBtn.textContent;
+        restoreBtn.disabled = true;
+        restoreBtn.textContent = "복원 중...";
+
+        try {
+            const res = await FirebaseSyncService.restoreFromCloud(nick, pin);
+            this.renderAll();
+            this.openCloudSyncModal();
+            this.showToast(`Firebase 클라우드 복원 및 병합 완료: 총 ${res.recordsCount}건 기록이 동기화되었습니다.`);
+        } catch (err) {
+            this.showToast(`클라우드 복원 실패: ${err.message || "해당 계정 백업이 없거나 오류 발생"}`);
+        } finally {
+            restoreBtn.disabled = false;
+            restoreBtn.textContent = originalText;
+        }
+    }
+
+    handleCloudUnlink() {
+        FirebaseSyncService.clearActiveSyncInfo();
+        this.renderDashboardScreen();
+        this.openCloudSyncModal();
+        this.showToast("클라우드 자동 동기화 연결이 해제되었습니다. 로컬 기록은 안전하게 유지됩니다.");
     }
 
     closeAllModals() {

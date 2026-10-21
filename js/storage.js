@@ -725,4 +725,114 @@ export class GymRatStorage {
             .filter(w => w.id !== id);
         localStorage.setItem(STORAGE_KEYS.WORKOUT_RECORDS, JSON.stringify(all));
     }
+
+    /**
+     * 클라우드 백업이나 로컬 파일 저장을 위해 현재 기기의 모든 사용자 데이터를 JSON 객체로 내보냅니다.
+     */
+    static exportUserDataJson() {
+        this.ensureSeeded();
+        return {
+            exportedAt: Date.now(),
+            version: "1.2.0",
+            profile: this.getProfile(),
+            customRoutines: this.getCustomRoutines(),
+            weightRecords: this.getWeightRecords(),
+            dietRecords: safeParseArray(localStorage.getItem(STORAGE_KEYS.DIET_RECORDS)) || [],
+            dailyChecklists: safeParseObject(localStorage.getItem(STORAGE_KEYS.DAILY_CHECKLISTS)) || {},
+            workoutRecords: safeParseArray(localStorage.getItem(STORAGE_KEYS.WORKOUT_RECORDS)) || []
+        };
+    }
+
+    /**
+     * 클라우드 스냅샷(또는 백업 파일)을 로컬 데이터와 무손실 병합합니다.
+     * 날짜별 체성분 기록이 중복될 경우 더 최신 타임스탬프를 보존하며, 기존 기록을 절대 유실하지 않습니다.
+     */
+    static importUserDataJson(incomingData) {
+        if (!incomingData || typeof incomingData !== "object") {
+            throw new Error("올바른 백업 데이터 형식이 아닙니다.");
+        }
+
+        // 1. 체성분 기록 병합
+        const localWeights = this.getWeightRecords();
+        const incomingWeights = Array.isArray(incomingData.weightRecords) ? incomingData.weightRecords : [];
+
+        const weightMap = new Map();
+        localWeights.forEach(r => {
+            if (r && r.recordDate) weightMap.set(r.recordDate, r);
+        });
+        incomingWeights.forEach(r => {
+            if (r && r.recordDate && !isUntouchedSampleRecord(r)) {
+                const cleaned = sanitizeUserRecord(r);
+                const existing = weightMap.get(r.recordDate);
+                if (!existing || (cleaned.updatedAt || 0) >= (existing.updatedAt || 0)) {
+                    weightMap.set(r.recordDate, cleaned);
+                }
+            }
+        });
+        const mergedWeights = Array.from(weightMap.values()).sort((a, b) =>
+            a.recordDate.localeCompare(b.recordDate)
+        );
+        localStorage.setItem(STORAGE_KEYS.WEIGHT_RECORDS, JSON.stringify(mergedWeights));
+        localStorage.setItem(STORAGE_KEYS.WEIGHT_RECORDS_BACKUP, JSON.stringify(mergedWeights));
+
+        // 2. 프로필 병합
+        const currentProfile = this.getProfile();
+        const incomingProfile = incomingData.profile && typeof incomingData.profile === "object" ? incomingData.profile : {};
+        const mergedProfile = { ...DEFAULT_USER_PROFILE, ...currentProfile, ...incomingProfile };
+        if (mergedWeights.length > 0) {
+            mergedProfile.startWeightKg = Number(mergedWeights[0].weightKg);
+            mergedProfile.startSkeletalMuscleKg = Number(mergedWeights[0].skeletalMuscleMassKg);
+            mergedProfile.startBodyFatPercent = Number(mergedWeights[0].bodyFatPercentage);
+            mergedProfile.currentWeightKg = Number(mergedWeights[mergedWeights.length - 1].weightKg);
+        }
+        this.saveProfile(mergedProfile);
+
+        // 3. 고정 식단 루틴 병합
+        if (incomingData.customRoutines && typeof incomingData.customRoutines === "object") {
+            this.saveCustomRoutines(incomingData.customRoutines);
+        }
+
+        // 4. 식단 기록 병합
+        const localDiets = safeParseArray(localStorage.getItem(STORAGE_KEYS.DIET_RECORDS)) || [];
+        const incomingDiets = Array.isArray(incomingData.dietRecords) ? incomingData.dietRecords : [];
+        const dietMap = new Map();
+        localDiets.forEach(d => {
+            if (d && d.id) dietMap.set(String(d.id), d);
+        });
+        incomingDiets.forEach(d => {
+            if (d && d.id) dietMap.set(String(d.id), d);
+        });
+        const mergedDiets = Array.from(dietMap.values());
+        localStorage.setItem(STORAGE_KEYS.DIET_RECORDS, JSON.stringify(mergedDiets));
+
+        // 5. 체크리스트 병합
+        const localChecklists = safeParseObject(localStorage.getItem(STORAGE_KEYS.DAILY_CHECKLISTS)) || {};
+        const incomingChecklists = incomingData.dailyChecklists && typeof incomingData.dailyChecklists === "object"
+            ? incomingData.dailyChecklists
+            : {};
+        const mergedChecklists = { ...localChecklists, ...incomingChecklists };
+        localStorage.setItem(STORAGE_KEYS.DAILY_CHECKLISTS, JSON.stringify(mergedChecklists));
+
+        // 6. 운동 기록 병합
+        const localWorkouts = safeParseArray(localStorage.getItem(STORAGE_KEYS.WORKOUT_RECORDS)) || [];
+        const incomingWorkouts = Array.isArray(incomingData.workoutRecords) ? incomingData.workoutRecords : [];
+        const workoutMap = new Map();
+        localWorkouts.forEach(w => {
+            if (w && w.id) workoutMap.set(String(w.id), w);
+        });
+        incomingWorkouts.forEach(w => {
+            if (w && w.id) workoutMap.set(String(w.id), w);
+        });
+        const mergedWorkouts = Array.from(workoutMap.values());
+        localStorage.setItem(STORAGE_KEYS.WORKOUT_RECORDS, JSON.stringify(mergedWorkouts));
+
+        return {
+            profile: mergedProfile,
+            customRoutines: this.getCustomRoutines(),
+            weightRecords: mergedWeights,
+            dietRecords: mergedDiets,
+            dailyChecklists: mergedChecklists,
+            workoutRecords: mergedWorkouts
+        };
+    }
 }
