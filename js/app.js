@@ -1115,6 +1115,24 @@ class GymRatApp {
      * 초기 랜딩 페이지 (본인 지정 아이디 + PIN 게이트) 초기화 및 인증 처리
      */
     initLandingGate() {
+        const syncInfo = FirebaseSyncService.getActiveSyncInfo();
+        const profile = GymRatStorage.getProfile();
+        const records = GymRatStorage.getWeightRecords();
+
+        // 1. 이미 로그인 세션이 활성화되어 있고 설문을 완료했거나 체성분 기록이 있는 경우: 즉시 메인 대시보드로 복원 진입
+        if (syncInfo.nickname && syncInfo.syncKey && (profile.onboardingCompleted || records.length > 0)) {
+            this.enterMainDashboard();
+            FirebaseSyncService.autoSyncIfActive();
+            return;
+        }
+
+        // 2. 로그인 세션은 있으나 온보딩 설문을 아직 마치지 않은 경우: 설문 위저드 화면으로 복원
+        if (syncInfo.nickname && syncInfo.syncKey && !profile.onboardingCompleted) {
+            this.openOnboardingWizard(syncInfo.nickname);
+            return;
+        }
+
+        // 3. 미로그인 상태: 본인 지정 아이디 + PIN 게이트 화면 표시
         const landingGate = document.getElementById("screen-landing-gate");
         const onboardingWizard = document.getElementById("screen-onboarding-wizard");
         const appMain = document.getElementById("app-main");
@@ -1129,7 +1147,6 @@ class GymRatApp {
         if (bottomNav) bottomNav.classList.add("hidden");
         if (statusBox) statusBox.classList.add("hidden");
 
-        const syncInfo = FirebaseSyncService.getActiveSyncInfo();
         if (syncInfo.nickname) {
             if (idInput) idInput.value = syncInfo.nickname;
             if (pinInput) pinInput.value = "";
@@ -1427,21 +1444,21 @@ class GymRatApp {
 
         const submitBtn = document.getElementById("btn-onboard-submit");
         if (submitBtn) {
-            submitBtn.addEventListener("click", e => {
+            submitBtn.addEventListener("click", async e => {
                 e.preventDefault();
-                this.handleCompleteOnboarding();
+                await this.handleCompleteOnboarding();
             });
         }
 
         const onboardForm = document.getElementById("form-onboarding-wizard");
         if (onboardForm) {
-            onboardForm.addEventListener("submit", e => {
+            onboardForm.addEventListener("submit", async e => {
                 e.preventDefault();
                 if (this.currentOnboardingStep && this.currentOnboardingStep < 5) {
                     this.goToOnboardingStep(this.currentOnboardingStep + 1);
                     return;
                 }
-                this.handleCompleteOnboarding();
+                await this.handleCompleteOnboarding();
             });
         }
     }
@@ -2195,7 +2212,7 @@ class GymRatApp {
             .join("");
     }
 
-    handleCompleteOnboarding() {
+    async handleCompleteOnboarding() {
         try {
             this.updateOnboardingSimulation(false);
             const evalRes =
@@ -2299,7 +2316,7 @@ class GymRatApp {
             const existingRecords = GymRatStorage.getWeightRecords();
             if (existingRecords.length === 0) {
                 const bodyFatMassKg = SafeWeightLossCalculator.round2(currentWeightKg * (currentFatPercent / 100));
-                GymRatStorage.saveWeightRecord({
+                GymRatStorage.upsertWeightRecord({
                     recordDate: this.todayStr,
                     weightKg: currentWeightKg,
                     skeletalMuscleMassKg: currentMuscleKg,
@@ -2309,8 +2326,14 @@ class GymRatApp {
                 });
             }
 
-            // 4. 클라우드 즉시 백업 및 대시보드 진입
-            FirebaseSyncService.autoSyncIfActive();
+            // 4. 로컬 슬롯 즉시 동기화 및 클라우드 즉시 백업
+            const syncInfo = FirebaseSyncService.getActiveSyncInfo();
+            if (syncInfo.syncKey) {
+                GymRatStorage.saveSlotSnapshot(syncInfo.syncKey);
+            }
+            await FirebaseSyncService.autoSyncIfActive();
+
+            // 5. 대시보드 진입
             this.enterMainDashboard();
             this.showToast(
                 `맞춤 설계 완료: 목표 ${targetWeightKg}kg (${evalRes.selectedDays}일 과정 · 일일 ${evalRes.recommendedDailyCalories.toLocaleString()}kcal)`
@@ -2410,7 +2433,8 @@ class GymRatApp {
         }
     }
 
-    handleCloudUnlink() {
+    async handleCloudUnlink() {
+        await FirebaseSyncService.autoSyncIfActive();
         FirebaseSyncService.clearActiveSyncInfo();
         this.closeAllModals();
         this.initLandingGate();

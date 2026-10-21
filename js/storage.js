@@ -1388,6 +1388,10 @@ export class GymRatStorage {
         return list;
     }
 
+    static saveWeightRecord(record) {
+        return this.upsertWeightRecord(record);
+    }
+
     static deleteWeightRecord(id) {
         const current = this.getWeightRecords();
         const list = current.filter(r => r.id !== id);
@@ -1550,6 +1554,7 @@ export class GymRatStorage {
             version: "1.2.0",
             profile: this.getProfile(),
             customRoutines: this.getCustomRoutines(),
+            customMeals: this.getCustomOnboardMeals() || [],
             weightRecords: this.getWeightRecords(),
             dietRecords: safeParseArray(localStorage.getItem(STORAGE_KEYS.DIET_RECORDS)) || [],
             dailyChecklists: safeParseObject(localStorage.getItem(STORAGE_KEYS.DAILY_CHECKLISTS)) || {},
@@ -1599,9 +1604,38 @@ export class GymRatStorage {
             mergedProfile.startBodyFatPercent = Number(mergedWeights[0].bodyFatPercentage);
             mergedProfile.currentWeightKg = Number(mergedWeights[mergedWeights.length - 1].weightKg);
         }
+
+        const wasOnboardingCompleted = Boolean(
+            currentProfile.onboardingCompleted ||
+            incomingProfile.onboardingCompleted ||
+            mergedWeights.length > 0
+        );
+        mergedProfile.onboardingCompleted = wasOnboardingCompleted;
+
+        // currentProfile이 이미 온보딩을 마쳤고 incomingProfile은 미완료인 경우 사용자 설정 목표치 보존
+        if (currentProfile.onboardingCompleted && !incomingProfile.onboardingCompleted) {
+            mergedProfile.targetWeightKg = currentProfile.targetWeightKg;
+            mergedProfile.minTargetSkeletalMuscleKg = currentProfile.minTargetSkeletalMuscleKg;
+            mergedProfile.targetBodyFatPercent = currentProfile.targetBodyFatPercent;
+            mergedProfile.dailyTargetCalories = currentProfile.dailyTargetCalories;
+            mergedProfile.dailyTargetProteinG = currentProfile.dailyTargetProteinG;
+            mergedProfile.customTargetDurationDays = currentProfile.customTargetDurationDays;
+            mergedProfile.programGoalType = currentProfile.programGoalType;
+            mergedProfile.weeklyWorkoutTargetDays = currentProfile.weeklyWorkoutTargetDays;
+            mergedProfile.workoutIntensityCode = currentProfile.workoutIntensityCode;
+            mergedProfile.age = currentProfile.age;
+            mergedProfile.gender = currentProfile.gender;
+            mergedProfile.heightCm = currentProfile.heightCm;
+        }
+
         this.saveProfile(mergedProfile);
 
-        // 3. 고정 식단 루틴 병합
+        // 3. 맞춤 식습관 목록 병합
+        if (incomingData.customMeals && Array.isArray(incomingData.customMeals) && incomingData.customMeals.length > 0) {
+            this.saveCustomOnboardMeals(incomingData.customMeals);
+        }
+
+        // 4. 고정 식단 루틴 병합
         if (incomingData.customRoutines && typeof incomingData.customRoutines === "object") {
             this.saveCustomRoutines(incomingData.customRoutines);
         }
@@ -1689,6 +1723,7 @@ export class GymRatStorage {
         localStorage.setItem(STORAGE_KEYS.DIET_RECORDS, JSON.stringify([]));
         localStorage.setItem(STORAGE_KEYS.WORKOUT_RECORDS, JSON.stringify([]));
         localStorage.setItem(STORAGE_KEYS.DAILY_CHECKLISTS, JSON.stringify({}));
+        localStorage.removeItem("gymrat_custom_meals");
     }
 
     /**
