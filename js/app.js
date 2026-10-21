@@ -540,13 +540,18 @@ class GymRatApp {
             : "등록된 체성분 기록이 없습니다. [오늘 체성분 입력]으로 1주차 시작일을 기록하세요.";
         document.getElementById("current-week-pill").textContent = !hasRecords
             ? "1주차 시작 대기"
-            : plan.latestDate === plan.startDateStr
-                ? "1주차 (시작일)"
-                : `${plan.currentWeekNumber}주차 진행 중`;
+            : plan.isThisWeekGoalSuccess
+                ? `${plan.currentWeekNumber}주차 목표 성공`
+                : plan.latestDate === plan.startDateStr
+                    ? "1주차 (시작일)"
+                    : `${plan.currentWeekNumber}주차 진행 중`;
         document.getElementById("atflee-current-weight").textContent = plan.currentWeightKg.toFixed(2);
-        document.getElementById("atflee-weekly-remaining").textContent = `- ${plan.remainingToLoseThisWeekKg.toFixed(2)}`;
-        document.getElementById("atflee-weekly-sub1").textContent =
-            `${plan.currentWeekNumber}주차 권장 -${plan.weeklyTargetLossKg.toFixed(2)}kg (목표 ${plan.thisWeekTargetWeightKg.toFixed(2)}kg)`;
+        document.getElementById("atflee-weekly-remaining").textContent = plan.isThisWeekGoalSuccess
+            ? "성공 (0.00)"
+            : `- ${plan.remainingToLoseThisWeekKg.toFixed(2)}`;
+        document.getElementById("atflee-weekly-sub1").textContent = plan.isThisWeekGoalSuccess
+            ? `${plan.currentWeekNumber}주차 목표(${plan.thisWeekTargetWeightKg.toFixed(2)}kg) 도달 성공`
+            : `${plan.currentWeekNumber}주차 권장 -${plan.weeklyTargetLossKg.toFixed(2)}kg (목표 ${plan.thisWeekTargetWeightKg.toFixed(2)}kg)`;
         document.getElementById("atflee-weekly-sub2").textContent =
             `터치하여 ${plan.currentWeekNumber}주차 이전 기록 및 이후 몸무게 보기`;
 
@@ -929,14 +934,20 @@ class GymRatApp {
                     const muscleOk = Number(rec.skeletalMuscleMassKg) >= Number(profile.minTargetSkeletalMuscleKg);
                     const weekNum = SafeWeightLossCalculator.calculateWeekNumber(plan.startDateStr, rec.recordDate);
                     const weekLabel = rec.recordDate === plan.startDateStr ? "1주차 시작일" : `${weekNum}주차`;
+                    const metaItem = plan.pastRecordsWithMeta.find(r => r.recordDate === rec.recordDate && r.id === rec.id) ||
+                        plan.pastRecordsWithMeta.find(r => r.recordDate === rec.recordDate);
+                    const goalSuccess = metaItem ? Boolean(metaItem.isGoalSuccess) : false;
                     return `
                 <div class="history-card">
                     <div class="history-info">
                         <div class="history-date-row">
                             <strong>[${weekLabel}] ${rec.recordDate}</strong>
-                            <span class="defense-pill ${muscleOk ? "ok" : "warn"}">
-                                ${muscleOk ? "골격근 방어" : "근손실 주의"}
-                            </span>
+                            <div style="display: flex; align-items: center; gap: 6px;">
+                                ${goalSuccess ? '<span class="roadmap-goal-badge success">성공</span>' : ""}
+                                <span class="defense-pill ${muscleOk ? "ok" : "warn"}">
+                                    ${muscleOk ? "골격근 방어" : "근손실 주의"}
+                                </span>
+                            </div>
                         </div>
                         <p class="history-metrics">
                             체중 <b>${Number(rec.weightKg).toFixed(2)}kg</b> ·
@@ -991,7 +1002,10 @@ class GymRatApp {
         const bannerEl = document.getElementById("roadmap-current-week-banner");
         bannerEl.innerHTML = `
             <div style="display: flex; justify-content: space-between; align-items: center;">
-                <strong class="text-lime" style="font-size: 13.5px;">현재 ${plan.currentWeekNumber}주차 목표 요약</strong>
+                <div style="display: flex; align-items: center; gap: 6px;">
+                    <strong class="text-lime" style="font-size: 13.5px;">현재 ${plan.currentWeekNumber}주차 목표 요약</strong>
+                    ${plan.isThisWeekGoalSuccess ? '<span class="roadmap-goal-badge success">성공</span>' : ""}
+                </div>
                 <span style="font-size: 11.5px; color: var(--text-secondary);">주간 권장 감량: -${plan.weeklyTargetLossKg.toFixed(2)}kg</span>
             </div>
             <div class="roadmap-summary-grid">
@@ -1005,7 +1019,7 @@ class GymRatApp {
                 </div>
                 <div>
                     <span>${plan.currentWeekNumber}주차 목표</span>
-                    <strong class="text-lime">${plan.thisWeekTargetWeightKg.toFixed(2)}kg</strong>
+                    <strong class="text-lime">${plan.thisWeekTargetWeightKg.toFixed(2)}kg ${plan.isThisWeekGoalSuccess ? "(성공)" : ""}</strong>
                 </div>
             </div>
         `;
@@ -1027,7 +1041,7 @@ class GymRatApp {
             panelFuture.classList.remove("hidden");
         }
 
-        // 1) 이전 측정 기록 렌더링
+        // 1) 이전 측정 기록 렌더링 (주차별 목표 몸무게 도달 시 '성공' 배지 및 문구 표시)
         const pastRowsEl = document.getElementById("roadmap-past-rows");
         if (plan.pastRecordsWithMeta.length === 0) {
             pastRowsEl.innerHTML = `<p class="empty-hint" style="padding: 18px 8px; text-align: center;">저장된 측정 기록이 없습니다. 상단 [오늘 체성분 입력] 버튼을 눌러 1주차 시작일을 기록하세요.</p>`;
@@ -1040,15 +1054,31 @@ class GymRatApp {
                         ? "1주차 (시작일)"
                         : `${rec.weekNumber}주차 ${isLatest ? "(현재)" : ""}`;
                     const deltaLabel = rec.isStartRecord ? "시작 기준점" : `${deltaSign} kg`;
+                    const targetSubText = rec.isGoalSuccess
+                        ? `${deltaLabel} · 목표(${rec.weekTargetWeightKg.toFixed(2)}kg) 성공`
+                        : rec.isStartRecord
+                            ? deltaLabel
+                            : `${deltaLabel} (목표 ${rec.weekTargetWeightKg.toFixed(2)}kg)`;
+                    const rowClassList = [
+                        "roadmap-row",
+                        isLatest ? "current-week-highlight" : "",
+                        rec.isGoalSuccess ? "goal-success-row" : ""
+                    ]
+                        .filter(Boolean)
+                        .join(" ");
+
                     return `
-                <div class="roadmap-row ${isLatest ? "current-week-highlight" : ""}">
+                <div class="${rowClassList}">
                     <div>
-                        <strong>${weekTitle}</strong>
+                        <div class="roadmap-week-title-row">
+                            <strong>${weekTitle}</strong>
+                            ${rec.isGoalSuccess ? '<span class="roadmap-goal-badge success">성공</span>' : ""}
+                        </div>
                         <span class="roadmap-sub">${rec.recordDate}</span>
                     </div>
                     <div>
-                        <strong>${rec.weightKg.toFixed(2)} kg</strong>
-                        <span class="roadmap-sub">${deltaLabel}</span>
+                        <strong>${rec.weightKg.toFixed(2)} kg ${rec.isGoalSuccess ? '<span class="roadmap-inline-success">성공</span>' : ""}</strong>
+                        <span class="roadmap-sub ${rec.isGoalSuccess ? "text-lime" : ""}">${targetSubText}</span>
                     </div>
                     <div>
                         <strong>골격근 ${rec.skeletalMuscleMassKg.toFixed(2)}kg</strong>

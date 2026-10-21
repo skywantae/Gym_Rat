@@ -874,7 +874,13 @@ export class SafeWeightLossCalculator {
             ? Math.min(1, Math.max(0, alreadyLostThisWeekKg / weeklyTargetLossKg))
             : 1;
 
-        // 이전 기록 리스트 (주차, 1주차 시작일 여부, 직전 대비 변화량 포함)
+        const initialStartWeightKg = firstRecord
+            ? Number(firstRecord.weightKg)
+            : Number(profile.startWeightKg || currentWeightKg);
+        const profileStartWeightKg = Number(profile.startWeightKg || initialStartWeightKg);
+        const isBulkMode = targetWeightKg > initialStartWeightKg + 0.1;
+
+        // 이전 기록 리스트 (주차, 1주차 시작일 여부, 직전 대비 변화량, 해당 주차 목표 몸무게 및 목표 달성 성공 여부 포함)
         const pastRecordsWithMeta = sorted.map((rec, idx) => {
             const prevRec = idx > 0 ? sorted[idx - 1] : null;
             const w = Number(rec.weightKg);
@@ -883,6 +889,56 @@ export class SafeWeightLossCalculator {
             const fm = rec.bodyFatMassKg != null ? Number(rec.bodyFatMassKg) : this.round2(w * (fp / 100));
             const deltaW = prevRec ? this.round2(w - Number(prevRec.weightKg)) : 0;
             const weekNum = this.calculateWeekNumber(startDateStr, rec.recordDate);
+            const weekRange = this.getWeekDateRange(startDateStr, weekNum);
+            const recordsBeforeWeek = sorted.filter(r => r.recordDate < weekRange.weekStartStr);
+            const recordsInThisWeekSoFar = sorted.filter(
+                (r, rIdx) => rIdx <= idx && r.recordDate >= weekRange.weekStartStr && r.recordDate <= weekRange.weekEndStr
+            );
+
+            let weekStartWeightKg = initialStartWeightKg;
+            if (recordsBeforeWeek.length > 0) {
+                weekStartWeightKg = Number(recordsBeforeWeek[recordsBeforeWeek.length - 1].weightKg);
+            } else if (recordsInThisWeekSoFar.length > 0) {
+                weekStartWeightKg = Number(recordsInThisWeekSoFar[0].weightKg);
+            }
+
+            let weekTargetWeightKg = targetWeightKg;
+            let isGoalSuccess = false;
+
+            if (isBulkMode) {
+                const targetFromWeekStart = this.round2(Math.min(targetWeightKg, weekStartWeightKg + weeklyTargetLossKg));
+                const targetFromCumulative = this.round2(Math.min(targetWeightKg, initialStartWeightKg + weeklyTargetLossKg * weekNum));
+                weekTargetWeightKg = Math.min(targetFromWeekStart, targetFromCumulative);
+                if (idx === 0) {
+                    const gainedFromProfileStart = this.round2(w - profileStartWeightKg);
+                    isGoalSuccess = w >= targetWeightKg - 0.01 || gainedFromProfileStart >= weeklyTargetLossKg - 0.01;
+                } else {
+                    const gainedFromWeekStart = this.round2(w - weekStartWeightKg);
+                    const gainedFromPrev = prevRec ? this.round2(w - Number(prevRec.weightKg)) : 0;
+                    isGoalSuccess =
+                        w >= weekTargetWeightKg - 0.01 ||
+                        gainedFromWeekStart >= weeklyTargetLossKg - 0.01 ||
+                        gainedFromPrev >= weeklyTargetLossKg - 0.01 ||
+                        w >= targetWeightKg - 0.01;
+                }
+            } else {
+                const targetFromWeekStart = this.round2(Math.max(targetWeightKg, weekStartWeightKg - weeklyTargetLossKg));
+                const targetFromCumulative = this.round2(Math.max(targetWeightKg, initialStartWeightKg - weeklyTargetLossKg * weekNum));
+                weekTargetWeightKg = Math.max(targetFromWeekStart, targetFromCumulative);
+                if (idx === 0) {
+                    const lostFromProfileStart = this.round2(profileStartWeightKg - w);
+                    isGoalSuccess = w <= targetWeightKg + 0.01 || lostFromProfileStart >= weeklyTargetLossKg - 0.01;
+                } else {
+                    const lostFromWeekStart = this.round2(weekStartWeightKg - w);
+                    const lostFromPrev = prevRec ? this.round2(Number(prevRec.weightKg) - w) : 0;
+                    isGoalSuccess =
+                        w <= weekTargetWeightKg + 0.01 ||
+                        lostFromWeekStart >= weeklyTargetLossKg - 0.01 ||
+                        lostFromPrev >= weeklyTargetLossKg - 0.01 ||
+                        w <= targetWeightKg + 0.01;
+                }
+            }
+
             return {
                 ...rec,
                 weightKg: w,
@@ -891,9 +947,17 @@ export class SafeWeightLossCalculator {
                 bodyFatPercentage: fp,
                 deltaWeightKg: deltaW,
                 weekNumber: weekNum,
-                isStartRecord: idx === 0
+                isStartRecord: idx === 0,
+                weekStartWeightKg,
+                weekTargetWeightKg,
+                isGoalSuccess
             };
         }).reverse();
+
+        const isThisWeekGoalSuccess =
+            sorted.length > 0 &&
+            (pastRecordsWithMeta.some(r => r.weekNumber === currentWeekNumber && r.isGoalSuccess) ||
+                (sorted.length > 1 && remainingToLoseThisWeekKg <= 0.01));
 
         // 이후 주차별 예상 몸무게 시뮬레이션 로드맵 생성 (1주차 시작일 기준 7일 단위)
         const futureWeeklyRoadmap = [];
@@ -1017,6 +1081,7 @@ export class SafeWeightLossCalculator {
             alreadyLostThisWeekKg,
             remainingToLoseThisWeekKg,
             weeklyProgressRatio,
+            isThisWeekGoalSuccess,
             targetWeightKg,
             minTargetMuscleKg,
             targetFatPercent,
