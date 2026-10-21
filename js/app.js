@@ -6,7 +6,13 @@
  */
 
 import { SafeWeightLossCalculator, getLocalDateString } from "./calculator.js";
-import { GymRatStorage, FixedRoutineTemplates, HabitMealCatalog, MachinePresets } from "./storage.js";
+import {
+    GymRatStorage,
+    FixedRoutineTemplates,
+    HabitMealCatalog,
+    MachinePresets,
+    SmartFoodCalorieEstimator
+} from "./storage.js";
 import { GymRatCharts } from "./chart.js";
 import { FirebaseSyncService } from "./firebase-sync.js";
 
@@ -229,6 +235,56 @@ class GymRatApp {
         document.getElementById("select-habit-drink").addEventListener("change", e => {
             this.applyDrinkPresetToInputs(e.target.value);
             this.updateHabitBuilderPreview();
+        });
+
+        const bindModalDirectFoodCalc = (btnId, inputId, category, applyFn) => {
+            const btn = document.getElementById(btnId);
+            const inp = document.getElementById(inputId);
+            const trigger = () => {
+                if (!inp) return;
+                const est = SmartFoodCalorieEstimator.estimateFromText(inp.value, category);
+                if (!est) {
+                    this.showToast("계산할 음식 이름을 입력해주세요. (예: 육회비빔밥 / 계란 2개, 두유)");
+                    return;
+                }
+                applyFn(est);
+                this.updateHabitBuilderPreview();
+                this.showToast(`${est.breakdownText} -> 총 ${est.caloriesKcal.toLocaleString()} kcal (단백질 ${est.proteinG}g) 계산 반영`);
+            };
+            if (btn) btn.addEventListener("click", trigger);
+            if (inp) {
+                inp.addEventListener("keydown", e => {
+                    if (e.key === "Enter") {
+                        e.preventDefault();
+                        trigger();
+                    }
+                });
+            }
+        };
+
+        bindModalDirectFoodCalc("btn-modal-calc-bf", "input-modal-direct-bf", "BREAKFAST", est => {
+            document.getElementById("select-habit-breakfast").value = "CUSTOM";
+            document.getElementById("input-habit-bf-title").value = `아침 고정 루틴 (${est.summaryTitle})`;
+            document.getElementById("input-habit-bf-kcal").value = est.caloriesKcal;
+            document.getElementById("input-habit-bf-pro").value = est.proteinG;
+            document.getElementById("input-habit-bf-carb").value = est.carbsG;
+            document.getElementById("input-habit-bf-fat").value = est.fatG;
+        });
+
+        bindModalDirectFoodCalc("btn-modal-calc-lc", "input-modal-direct-lc", "LUNCH", est => {
+            document.getElementById("select-habit-lunch-main").value = "CUSTOM";
+            document.getElementById("input-habit-lc-kcal").value = est.caloriesKcal;
+            document.getElementById("input-habit-lc-pro").value = est.proteinG;
+            document.getElementById("input-habit-lc-carb").value = est.carbsG;
+            document.getElementById("input-habit-lc-fat").value = est.fatG;
+        });
+
+        bindModalDirectFoodCalc("btn-modal-calc-dr", "input-modal-direct-dr", "DRINK", est => {
+            document.getElementById("select-habit-drink").value = "CUSTOM";
+            document.getElementById("input-habit-dr-kcal").value = est.caloriesKcal;
+            document.getElementById("input-habit-dr-pro").value = est.proteinG;
+            document.getElementById("input-habit-dr-carb").value = est.carbsG;
+            document.getElementById("input-habit-dr-fat").value = est.fatG;
         });
 
         [
@@ -1522,9 +1578,40 @@ class GymRatApp {
     }
 
     /**
-     * 신규 계정 온보딩 질문 리스트 & 논문 근거 목표 일수(앞당기기/늘리기) 시뮬레이터
+     * 신규 계정 온보딩 질문 리스트 (1문 1화면 단계별 진행)
+     * & 식품군 확장/직접 음식 입력 평균 칼로리 계산 & 논문 근거 목표 일수 시뮬레이터
      */
     bindOnboardingWizardEvents() {
+        // 단계별 이동 버튼 (다음 질문으로 / 이전 질문 / 상단 탭 클릭)
+        const navMap = [
+            { id: "btn-onboard-next-1", targetStep: 2 },
+            { id: "btn-onboard-prev-2", targetStep: 1 },
+            { id: "btn-onboard-next-2", targetStep: 3 },
+            { id: "btn-onboard-prev-3", targetStep: 2 },
+            { id: "btn-onboard-next-3", targetStep: 4 },
+            { id: "btn-onboard-prev-4", targetStep: 3 },
+            { id: "btn-onboard-next-4", targetStep: 5 },
+            { id: "btn-onboard-prev-5", targetStep: 4 }
+        ];
+
+        navMap.forEach(({ id, targetStep }) => {
+            const btn = document.getElementById(id);
+            if (btn) {
+                btn.addEventListener("click", () => {
+                    this.goToOnboardingStep(targetStep);
+                });
+            }
+        });
+
+        document.querySelectorAll("[data-step-jump]").forEach(btn => {
+            btn.addEventListener("click", () => {
+                const step = parseInt(btn.getAttribute("data-step-jump"), 10);
+                if (step >= 1 && step <= 5) {
+                    this.goToOnboardingStep(step);
+                }
+            });
+        });
+
         const autoEstimateBtn = document.getElementById("btn-onboard-auto-estimate");
         if (autoEstimateBtn) {
             autoEstimateBtn.addEventListener("click", () => {
@@ -1585,6 +1672,108 @@ class GymRatApp {
             if (el) {
                 el.addEventListener("change", () => this.updateOnboardingSimulation(false));
                 el.addEventListener("input", () => this.updateOnboardingSimulation(false));
+            }
+        });
+
+        // 질문 4 (평소 식습관): 프리셋 드롭다운 변경 시 칼로리/단백질 자동 반영
+        const bfSelect = document.getElementById("onboard-habit-breakfast");
+        if (bfSelect) {
+            bfSelect.addEventListener("change", () => {
+                this.applyOnboardingBreakfastPreset(bfSelect.value);
+                this.updateOnboardingStep4DietSummary();
+            });
+        }
+
+        const lcSelect = document.getElementById("onboard-habit-lunch");
+        if (lcSelect) {
+            lcSelect.addEventListener("change", () => {
+                this.applyOnboardingLunchPreset(lcSelect.value);
+                this.updateOnboardingStep4DietSummary();
+            });
+        }
+
+        const drSelect = document.getElementById("onboard-habit-drink");
+        if (drSelect) {
+            drSelect.addEventListener("change", () => {
+                this.applyOnboardingDrinkPreset(drSelect.value);
+                this.updateOnboardingStep4DietSummary();
+            });
+        }
+
+        // 질문 4: 직접 음식 입력 평균 칼로리 계산 버튼 및 엔터 키 바인딩
+        const bindOnboardDirectCalc = (btnId, inputId, category, onResult) => {
+            const btn = document.getElementById(btnId);
+            const inp = document.getElementById(inputId);
+            const runCalc = () => {
+                if (!inp) return;
+                const est = SmartFoodCalorieEstimator.estimateFromText(inp.value, category);
+                if (!est) {
+                    this.showToast("평균 칼로리를 계산할 음식 이름을 입력해주세요. (예: 육회비빔밥 / 계란 2개, 두유)");
+                    return;
+                }
+                onResult(est);
+                this.updateOnboardingStep4DietSummary();
+                this.showToast(
+                    `${est.breakdownText} -> 총 ${est.caloriesKcal.toLocaleString()} kcal (단백질 ${est.proteinG}g) 자동 계산 완료`
+                );
+            };
+            if (btn) btn.addEventListener("click", runCalc);
+            if (inp) {
+                inp.addEventListener("keydown", e => {
+                    if (e.key === "Enter") {
+                        e.preventDefault();
+                        runCalc();
+                    }
+                });
+            }
+        };
+
+        bindOnboardDirectCalc("btn-calc-direct-bf", "onboard-direct-bf-text", "BREAKFAST", est => {
+            document.getElementById("onboard-habit-breakfast").value = "CUSTOM";
+            document.getElementById("onboard-bf-kcal").value = est.caloriesKcal;
+            document.getElementById("onboard-bf-pro").value = est.proteinG;
+            this.customOnboardBfMeta = est;
+            const hint = document.getElementById("onboard-direct-bf-breakdown");
+            if (hint) {
+                hint.textContent = `자동 계산 내역: ${est.breakdownText} -> 총 ${est.caloriesKcal.toLocaleString()} kcal / 단백질 ${est.proteinG}g (탄수 ${est.carbsG}g · 지방 ${est.fatG}g)`;
+            }
+        });
+
+        bindOnboardDirectCalc("btn-calc-direct-lc", "onboard-direct-lc-text", "LUNCH", est => {
+            document.getElementById("onboard-habit-lunch").value = "CUSTOM";
+            document.getElementById("onboard-lc-kcal").value = est.caloriesKcal;
+            document.getElementById("onboard-lc-pro").value = est.proteinG;
+            this.customOnboardLcMeta = est;
+            const hint = document.getElementById("onboard-direct-lc-breakdown");
+            if (hint) {
+                hint.textContent = `자동 계산 내역: ${est.breakdownText} -> 총 ${est.caloriesKcal.toLocaleString()} kcal / 단백질 ${est.proteinG}g (탄수 ${est.carbsG}g · 지방 ${est.fatG}g)`;
+            }
+        });
+
+        bindOnboardDirectCalc("btn-calc-direct-dr", "onboard-direct-dr-text", "DRINK", est => {
+            document.getElementById("onboard-habit-drink").value = "CUSTOM";
+            document.getElementById("onboard-dr-kcal").value = est.caloriesKcal;
+            document.getElementById("onboard-dr-pro").value = est.proteinG;
+            this.customOnboardDrMeta = est;
+            const hint = document.getElementById("onboard-direct-dr-breakdown");
+            if (hint) {
+                hint.textContent = `자동 계산 내역: ${est.breakdownText} -> 총 ${est.caloriesKcal.toLocaleString()} kcal / 단백질 ${est.proteinG}g`;
+            }
+        });
+
+        // 질문 4: 칼로리/단백질 입력칸 직접 수정 시 실시간 합산 반영
+        [
+            "onboard-bf-kcal",
+            "onboard-bf-pro",
+            "onboard-lc-kcal",
+            "onboard-lc-pro",
+            "onboard-dr-kcal",
+            "onboard-dr-pro"
+        ].forEach(id => {
+            const el = document.getElementById(id);
+            if (el) {
+                el.addEventListener("input", () => this.updateOnboardingStep4DietSummary());
+                el.addEventListener("change", () => this.updateOnboardingStep4DietSummary());
             }
         });
 
@@ -1663,8 +1852,126 @@ class GymRatApp {
         if (onboardForm) {
             onboardForm.addEventListener("submit", e => {
                 e.preventDefault();
+                if (this.currentOnboardingStep && this.currentOnboardingStep < 5) {
+                    this.goToOnboardingStep(this.currentOnboardingStep + 1);
+                    return;
+                }
                 this.handleCompleteOnboarding();
             });
+        }
+    }
+
+    goToOnboardingStep(stepNumber) {
+        const clampedStep = Math.max(1, Math.min(5, Number(stepNumber) || 1));
+        this.currentOnboardingStep = clampedStep;
+
+        const stepTitles = {
+            1: "질문 1 / 5 · 나이 · 성별 · 키 · 현재 체성분",
+            2: "질문 2 / 5 · 운동 목적 및 주간 운동 횟수·강도",
+            3: "질문 3 / 5 · 직업군 및 하루 근무 환경 (소모 칼로리 산출)",
+            4: "질문 4 / 5 · 평소 식습관 및 음식 평균 칼로리 계산",
+            5: "질문 5 / 5 · 추천 목표 및 도달 일수 설정 (앞당기기/늘리기 논문 분석)"
+        };
+
+        for (let i = 1; i <= 5; i++) {
+            const cardEl = document.getElementById(`onboard-step-${i}`);
+            if (cardEl) {
+                if (i === clampedStep) {
+                    cardEl.classList.remove("hidden");
+                } else {
+                    cardEl.classList.add("hidden");
+                }
+            }
+        }
+
+        const pct = clampedStep * 20;
+        const indTextEl = document.getElementById("onboard-step-indicator-text");
+        const pctTextEl = document.getElementById("onboard-step-pct-text");
+        const barEl = document.getElementById("onboard-step-progress-bar");
+
+        if (indTextEl) indTextEl.textContent = stepTitles[clampedStep];
+        if (pctTextEl) pctTextEl.textContent = `${pct}% 진행`;
+        if (barEl) barEl.style.width = `${pct}%`;
+
+        document.querySelectorAll("[data-step-jump]").forEach(btn => {
+            const s = parseInt(btn.getAttribute("data-step-jump"), 10);
+            btn.classList.remove("active", "completed");
+            if (s === clampedStep) {
+                btn.classList.add("active");
+            } else if (s < clampedStep) {
+                btn.classList.add("completed");
+            }
+        });
+
+        this.updateOnboardingSimulation(false);
+        this.updateOnboardingStep4DietSummary();
+        window.scrollTo({ top: 0, behavior: "smooth" });
+    }
+
+    applyOnboardingBreakfastPreset(code) {
+        const found = HabitMealCatalog.BREAKFAST_PRESETS.find(p => p.code === code);
+        if (!found) return;
+        document.getElementById("onboard-bf-kcal").value = found.caloriesKcal;
+        document.getElementById("onboard-bf-pro").value = found.proteinG;
+        this.customOnboardBfMeta = null;
+        const hint = document.getElementById("onboard-direct-bf-breakdown");
+        if (hint) {
+            hint.textContent = `${found.detail} -> ${found.caloriesKcal.toLocaleString()} kcal / 단백질 ${found.proteinG}g`;
+        }
+    }
+
+    applyOnboardingLunchPreset(code) {
+        const found = HabitMealCatalog.LUNCH_MAIN_PRESETS.find(p => p.code === code);
+        if (!found) return;
+        document.getElementById("onboard-lc-kcal").value = found.caloriesKcal;
+        document.getElementById("onboard-lc-pro").value = found.proteinG;
+        this.customOnboardLcMeta = null;
+        const hint = document.getElementById("onboard-direct-lc-breakdown");
+        if (hint) {
+            hint.textContent = `${found.detail} -> ${found.caloriesKcal.toLocaleString()} kcal / 단백질 ${found.proteinG}g`;
+        }
+    }
+
+    applyOnboardingDrinkPreset(code) {
+        const found = HabitMealCatalog.FIXED_DRINK_PRESETS.find(p => p.code === code);
+        if (!found) return;
+        document.getElementById("onboard-dr-kcal").value = found.caloriesKcal;
+        document.getElementById("onboard-dr-pro").value = found.proteinG;
+        this.customOnboardDrMeta = null;
+        const hint = document.getElementById("onboard-direct-dr-breakdown");
+        if (hint) {
+            hint.textContent = `${found.detail} -> ${found.caloriesKcal.toLocaleString()} kcal / 단백질 ${found.proteinG}g`;
+        }
+    }
+
+    updateOnboardingStep4DietSummary() {
+        const bfKcal = parseInt(document.getElementById("onboard-bf-kcal").value, 10) || 0;
+        const bfPro = parseInt(document.getElementById("onboard-bf-pro").value, 10) || 0;
+        const lcKcal = parseInt(document.getElementById("onboard-lc-kcal").value, 10) || 0;
+        const lcPro = parseInt(document.getElementById("onboard-lc-pro").value, 10) || 0;
+        const drKcal = parseInt(document.getElementById("onboard-dr-kcal").value, 10) || 0;
+        const drPro = parseInt(document.getElementById("onboard-dr-pro").value, 10) || 0;
+
+        const daytimeKcal = bfKcal + lcKcal + drKcal;
+        const daytimePro = bfPro + lcPro + drPro;
+
+        const evalRes = this.latestOnboardingEvaluation;
+        const targetKcal = evalRes ? evalRes.recommendedDailyCalories : 2200;
+        const targetPro = evalRes ? evalRes.recommendedProteinG : 150;
+        const remainDinnerKcal = targetKcal - daytimeKcal;
+        const remainDinnerPro = Math.max(0, targetPro - daytimePro);
+
+        const summaryBox = document.getElementById("onboard-step4-diet-summary");
+        if (summaryBox) {
+            summaryBox.innerHTML = `
+                <div class="tdee-preview-header">
+                    <strong class="text-lime">평소 아침 + 점심 + 음료 고정 합계: ${daytimeKcal.toLocaleString()} kcal (단백질 ${daytimePro}g)</strong>
+                </div>
+                <p class="tdee-preview-sub">
+                    아침 <b>${bfKcal.toLocaleString()} kcal</b>(${bfPro}g) + 점심 <b>${lcKcal.toLocaleString()} kcal</b>(${lcPro}g) + 음료·간식 <b>${drKcal.toLocaleString()} kcal</b>(${drPro}g)<br/>
+                    현재 설계된 일일 목표 칼로리(<b>${targetKcal.toLocaleString()} kcal</b>) 기준, 저녁 식사로 허용되는 여유 칼로리는 <strong class="text-blue">${remainDinnerKcal.toLocaleString()} kcal</strong> (추가 필요 단백질 <strong class="text-lime">${remainDinnerPro}g</strong>)입니다.
+                </p>
+            `;
         }
     }
 
@@ -1682,43 +1989,49 @@ class GymRatApp {
         const subEl = document.getElementById("onboard-account-subtitle");
         if (subEl) {
             const label = nickname ? `[계정: ${nickname}] ` : "";
-            subEl.textContent = `${label}나이·성별·키·몸무게·목적·식습관·운동 강도를 바탕으로 안정적인 목표와 추천 일수를 산출합니다.`;
+            subEl.textContent = `${label}질문 1번부터 5번까지 차례대로 답변하시면 신체 스펙·목적·식습관에 맞춘 최적 목표와 추천 일수를 산출합니다.`;
         }
 
-        // 식습관 셀렉트 옵션 채우기
+        // 식습관 셀렉트 옵션 채우기 (다양한 식품군 + 직접 입력 옵션 포함)
         const bfSelect = document.getElementById("onboard-habit-breakfast");
         const lcSelect = document.getElementById("onboard-habit-lunch");
         const drSelect = document.getElementById("onboard-habit-drink");
         const customRoutines = GymRatStorage.getCustomRoutines();
 
         if (bfSelect) {
-            bfSelect.innerHTML = HabitMealCatalog.BREAKFAST_PRESETS.map(
-                p => `<option value="${p.code}">${p.label} (${p.caloriesKcal} kcal / 단백질 ${p.proteinG}g)</option>`
-            ).join("");
+            bfSelect.innerHTML =
+                HabitMealCatalog.BREAKFAST_PRESETS.map(
+                    p => `<option value="${p.code}">${p.label} (${p.caloriesKcal} kcal / 단백질 ${p.proteinG}g)</option>`
+                ).join("") + `<option value="CUSTOM">[직접 입력] 아래 입력창에 음식 직접 입력하여 평균 칼로리 계산</option>`;
             bfSelect.value =
                 customRoutines.breakfastPresetCode && customRoutines.breakfastPresetCode !== "CUSTOM"
                     ? customRoutines.breakfastPresetCode
                     : "BF_EGG3_APPLE1_SHAKE";
+            this.applyOnboardingBreakfastPreset(bfSelect.value);
         }
 
         if (lcSelect) {
-            lcSelect.innerHTML = HabitMealCatalog.LUNCH_MAIN_PRESETS.map(
-                p => `<option value="${p.code}">${p.label} (${p.caloriesKcal.toLocaleString()} kcal)</option>`
-            ).join("");
+            lcSelect.innerHTML =
+                HabitMealCatalog.LUNCH_MAIN_PRESETS.map(
+                    p => `<option value="${p.code}">${p.label} (${p.caloriesKcal.toLocaleString()} kcal / 단백질 ${p.proteinG}g)</option>`
+                ).join("") + `<option value="CUSTOM">[직접 입력] 아래 입력창에 음식 직접 입력하여 평균 칼로리 계산</option>`;
             lcSelect.value =
                 customRoutines.lunchMainPresetCode && customRoutines.lunchMainPresetCode !== "CUSTOM"
                     ? customRoutines.lunchMainPresetCode
                     : "LC_CAFETERIA_SEOLLEONGTANG";
+            this.applyOnboardingLunchPreset(lcSelect.value);
         }
 
         if (drSelect) {
-            drSelect.innerHTML = HabitMealCatalog.FIXED_DRINK_PRESETS.map(
-                p => `<option value="${p.code}">${p.label} (${p.caloriesKcal} kcal)</option>`
-            ).join("");
+            drSelect.innerHTML =
+                HabitMealCatalog.FIXED_DRINK_PRESETS.map(
+                    p => `<option value="${p.code}">${p.label} (${p.caloriesKcal} kcal / 단백질 ${p.proteinG}g)</option>`
+                ).join("") + `<option value="CUSTOM">[직접 입력] 아래 입력창에 음료·간식 직접 입력하여 평균 칼로리 계산</option>`;
             drSelect.value =
                 customRoutines.fixedDrinkPresetCode && customRoutines.fixedDrinkPresetCode !== "CUSTOM"
                     ? customRoutines.fixedDrinkPresetCode
                     : "DR_GS25_BARISTA_174";
+            this.applyOnboardingDrinkPreset(drSelect.value);
         }
 
         const profile = GymRatStorage.getProfile();
@@ -1769,7 +2082,8 @@ class GymRatApp {
             this.applyOnboardingRecommendedTargets(true);
         }
 
-        window.scrollTo({ top: 0, behavior: "smooth" });
+        // 항상 첫 번째 질문(1/5) 화면부터 시작
+        this.goToOnboardingStep(1);
     }
 
     applyOnboardingRecommendedTargets(resetDaysToRecommended = true) {
@@ -1833,6 +2147,19 @@ class GymRatApp {
             recommendedDailyDeficitKcal: 500
         });
 
+        // 질문 3 화면의 실시간 TDEE 프리뷰 박스 업데이트
+        const step3Box = document.getElementById("onboard-step3-tdee-box");
+        if (step3Box) {
+            step3Box.innerHTML = `
+                <div class="tdee-preview-header">
+                    <strong class="text-lime">산출된 일평균 총 소모 칼로리(TDEE): 약 ${tdeeObj.estimatedDailyTdeeKcal.toLocaleString()} kcal/일</strong>
+                </div>
+                <p class="tdee-preview-sub">
+                    기초대사량(BMR) <b>${tdeeObj.bmrKcal.toLocaleString()} kcal</b> + 근무 중 활동대사량(일평균) <b>${tdeeObj.avgDailyWorkNeatKcal.toLocaleString()} kcal</b> + 운동·일상·소화 대사량 <b>${(tdeeObj.nonWorkNeatKcal + tdeeObj.avgDailyExerciseKcal + tdeeObj.tefKcal).toLocaleString()} kcal</b>
+                </p>
+            `;
+        }
+
         // 1차 호출로 권장 일수(recommendedDays) 산출
         const initialEval = SafeWeightLossCalculator.evaluateDurationPlan({
             gender,
@@ -1848,7 +2175,9 @@ class GymRatApp {
             workoutIntensityCode,
             trainingExperienceCode,
             weeklyWorkoutSessions,
-            estimatedDailyTdeeKcal: tdeeObj.estimatedDailyTdeeKcal,
+            occupationCode,
+            workPostureCode,
+            dailyWorkHours,
             selectedDurationDays: null
         });
 
@@ -1881,7 +2210,9 @@ class GymRatApp {
             workoutIntensityCode,
             trainingExperienceCode,
             weeklyWorkoutSessions,
-            estimatedDailyTdeeKcal: tdeeObj.estimatedDailyTdeeKcal,
+            occupationCode,
+            workPostureCode,
+            dailyWorkHours,
             selectedDurationDays: selectedDays
         });
 
@@ -2001,21 +2332,48 @@ class GymRatApp {
         profile.onboardingCompleted = true;
         GymRatStorage.saveProfile(profile);
 
-        // 2. 평소 식습관 기반 고정 식단 루틴 자동 생성 및 저장
+        // 2. 평소 식습관 (프리셋 또는 직접 입력 음식 평균 칼로리) 기반 고정 식단 루틴 생성 및 저장
         const bfCode = document.getElementById("onboard-habit-breakfast").value || "BF_EGG3_APPLE1_SHAKE";
         const lcCode = document.getElementById("onboard-habit-lunch").value || "LC_CAFETERIA_SEOLLEONGTANG";
         const drCode = document.getElementById("onboard-habit-drink").value || "DR_GS25_BARISTA_174";
 
-        const bfPreset = HabitMealCatalog.BREAKFAST_PRESETS.find(p => p.code === bfCode) || HabitMealCatalog.BREAKFAST_PRESETS[0];
-        const lcPreset = HabitMealCatalog.LUNCH_MAIN_PRESETS.find(p => p.code === lcCode) || HabitMealCatalog.LUNCH_MAIN_PRESETS[0];
-        const drPreset = HabitMealCatalog.FIXED_DRINK_PRESETS.find(p => p.code === drCode) || HabitMealCatalog.FIXED_DRINK_PRESETS[0];
+        const bfPreset = HabitMealCatalog.BREAKFAST_PRESETS.find(p => p.code === bfCode);
+        const lcPreset = HabitMealCatalog.LUNCH_MAIN_PRESETS.find(p => p.code === lcCode);
+        const drPreset = HabitMealCatalog.FIXED_DRINK_PRESETS.find(p => p.code === drCode);
 
-        const lcLabelShort = lcPreset.label.split("(")[0].trim();
-        const drLabelShort = drPreset.label.split("(")[0].trim();
-        const lunchCombinedKcal = lcPreset.caloriesKcal + drPreset.caloriesKcal;
-        const lunchCombinedPro = lcPreset.proteinG + drPreset.proteinG;
-        const lunchCombinedCarb = lcPreset.carbsG + drPreset.carbsG;
-        const lunchCombinedFat = lcPreset.fatG + drPreset.fatG;
+        const bfKcal = parseInt(document.getElementById("onboard-bf-kcal").value, 10) || (bfPreset ? bfPreset.caloriesKcal : 400);
+        const bfPro = parseInt(document.getElementById("onboard-bf-pro").value, 10) || (bfPreset ? bfPreset.proteinG : 25);
+        const bfCarb = bfPreset ? bfPreset.carbsG : (this.customOnboardBfMeta ? this.customOnboardBfMeta.carbsG : Math.round((bfKcal * 0.45) / 4));
+        const bfFat = bfPreset ? bfPreset.fatG : (this.customOnboardBfMeta ? this.customOnboardBfMeta.fatG : Math.round((bfKcal * 0.25) / 9));
+
+        const lcKcal = parseInt(document.getElementById("onboard-lc-kcal").value, 10) || (lcPreset ? lcPreset.caloriesKcal : 900);
+        const lcPro = parseInt(document.getElementById("onboard-lc-pro").value, 10) || (lcPreset ? lcPreset.proteinG : 32);
+        const lcCarb = lcPreset ? lcPreset.carbsG : (this.customOnboardLcMeta ? this.customOnboardLcMeta.carbsG : Math.round((lcKcal * 0.5) / 4));
+        const lcFat = lcPreset ? lcPreset.fatG : (this.customOnboardLcMeta ? this.customOnboardLcMeta.fatG : Math.round((lcKcal * 0.3) / 9));
+
+        const drKcal = parseInt(document.getElementById("onboard-dr-kcal").value, 10) || (drPreset ? drPreset.caloriesKcal : 0);
+        const drPro = parseInt(document.getElementById("onboard-dr-pro").value, 10) || (drPreset ? drPreset.proteinG : 0);
+        const drCarb = drPreset ? drPreset.carbsG : (this.customOnboardDrMeta ? this.customOnboardDrMeta.carbsG : Math.round((drKcal * 0.6) / 4));
+        const drFat = drPreset ? drPreset.fatG : (this.customOnboardDrMeta ? this.customOnboardDrMeta.fatG : Math.round((drKcal * 0.25) / 9));
+
+        const bfDirectText = document.getElementById("onboard-direct-bf-text").value.trim();
+        const lcDirectText = document.getElementById("onboard-direct-lc-text").value.trim();
+        const drDirectText = document.getElementById("onboard-direct-dr-text").value.trim();
+
+        const bfLabel = bfPreset
+            ? bfPreset.label.replace(/^\[[^\]]+\]\s*/, "")
+            : bfDirectText || "사용자 맞춤 아침 식단";
+        const lcLabelShort = lcPreset
+            ? lcPreset.label.replace(/^\[[^\]]+\]\s*/, "").split("(")[0].trim()
+            : lcDirectText || "사용자 맞춤 점심 식사";
+        const drLabelShort = drPreset
+            ? drPreset.label.replace(/^\[[^\]]+\]\s*/, "").split("(")[0].trim()
+            : drDirectText || "맞춤 음료";
+
+        const lunchCombinedKcal = lcKcal + drKcal;
+        const lunchCombinedPro = lcPro + drPro;
+        const lunchCombinedCarb = lcCarb + drCarb;
+        const lunchCombinedFat = lcFat + drFat;
 
         GymRatStorage.saveCustomRoutines(
             {
@@ -2026,20 +2384,20 @@ class GymRatApp {
                     templateCode: "FIXED_BREAKFAST_EGG_APPLE_SHAKE",
                     mealType: "BREAKFAST",
                     mealLabel: "아침",
-                    title: `아침 고정 루틴 (${bfPreset.label})`,
-                    subtitle: bfPreset.detail,
-                    badgeText: `원클릭 고정 루틴 · ${bfPreset.caloriesKcal.toLocaleString()} kcal / 단백질 ${bfPreset.proteinG}g`,
-                    caloriesKcal: bfPreset.caloriesKcal,
-                    carbsG: bfPreset.carbsG,
-                    proteinG: bfPreset.proteinG,
-                    fatG: bfPreset.fatG
+                    title: `아침 고정 루틴 (${bfLabel})`,
+                    subtitle: bfPreset ? bfPreset.detail : `직접 입력 식단 (${bfLabel} · ${bfKcal.toLocaleString()} kcal / 단백질 ${bfPro}g)`,
+                    badgeText: `원클릭 고정 루틴 · ${bfKcal.toLocaleString()} kcal / 단백질 ${bfPro}g`,
+                    caloriesKcal: bfKcal,
+                    carbsG: bfCarb,
+                    proteinG: bfPro,
+                    fatG: bfFat
                 },
                 LUNCH_FIXED: {
                     templateCode: "FIXED_LUNCH_CAFETERIA_LATTE",
                     mealType: "LUNCH",
                     mealLabel: "점심",
                     title: `점심 고정 루틴 (${lcLabelShort} + ${drLabelShort})`,
-                    subtitle: `${lcLabelShort}(약 ${lcPreset.caloriesKcal.toLocaleString()} kcal) + ${drLabelShort}(${drPreset.caloriesKcal.toLocaleString()} kcal)`,
+                    subtitle: `${lcLabelShort}(약 ${lcKcal.toLocaleString()} kcal) + ${drLabelShort}(${drKcal.toLocaleString()} kcal)`,
                     badgeText: `고정 템플릿 · ${lunchCombinedKcal.toLocaleString()} kcal / 단백질 ${lunchCombinedPro}g`,
                     caloriesKcal: lunchCombinedKcal,
                     carbsG: lunchCombinedCarb,

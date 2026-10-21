@@ -71,8 +71,8 @@
     </section>
 
     <!-- =================================================================
-         신규 계정용 온보딩 질문 리스트 & 논문 기반 목표 기간 설정 위저드
-         (기록이 없는 신규 계정 로그인 시 자동 실행)
+         신규 계정용 온보딩 질문 리스트 (1문 1화면 단계별 진행 위저드)
+         & 식품군 확장/직접 음식 입력 평균 칼로리 계산 & 논문 기반 목표 기간 시뮬레이터
          ================================================================= -->
     <section id="screen-onboarding-wizard" class="onboarding-wrapper hidden">
         <div class="onboarding-container">
@@ -81,26 +81,46 @@
                     <span class="brand-badge">NEW ACCOUNT SETUP</span>
                     <h1 class="onboarding-main-title">신규 계정 맞춤 설계 질문 리스트</h1>
                     <p id="onboard-account-subtitle" class="onboarding-sub">
-                        입력하신 신체 스펙·목적·운동 강도·식습관을 바탕으로 최적의 목표와 추천 일수를 산출합니다.
+                        한 단계씩 질문에 답변하시면 신체 스펙·목적·식습관에 맞춘 최적의 목표와 추천 일수를 산출합니다.
                     </p>
                 </div>
                 <button type="button" id="btn-onboard-logout" class="btn-logout">다른 계정으로 로그인 (로그아웃)</button>
             </div>
 
+            <!-- 단계별 진행 상태 표시 바 (질문 1/5 ~ 5/5) -->
+            <div class="onboard-progress-header">
+                <div class="onboard-progress-meta">
+                    <strong id="onboard-step-indicator-text" class="text-lime">질문 1 / 5 · 나이 · 성별 · 키 · 현재 체성분</strong>
+                    <span id="onboard-step-pct-text" class="card-subtitle">20% 완료</span>
+                </div>
+                <div class="progress-track" style="margin: 8px 0 10px;">
+                    <div id="onboard-step-progress-bar" class="progress-fill bg-lime" style="width: 20%;"></div>
+                </div>
+                <div class="onboard-step-pills-row">
+                    <button type="button" class="onboard-step-tab active" data-step-jump="1">1. 신체 스펙</button>
+                    <button type="button" class="onboard-step-tab" data-step-jump="2">2. 운동 목적·강도</button>
+                    <button type="button" class="onboard-step-tab" data-step-jump="3">3. 근무 환경</button>
+                    <button type="button" class="onboard-step-tab" data-step-jump="4">4. 평소 식습관</button>
+                    <button type="button" class="onboard-step-tab" data-step-jump="5">5. 목표·일수 설계</button>
+                </div>
+            </div>
+
             <form id="form-onboarding-wizard">
-                <!-- STEP 1: 기본 신체 스펙 및 현재 체성분 -->
-                <article class="card onboarding-step-card">
+                <!-- =========================================================
+                     질문 1 화면 (1/5): 기본 신체 스펙 및 현재 체성분
+                     ========================================================= -->
+                <article id="onboard-step-1" class="card onboarding-step-card">
                     <div class="onboarding-step-head">
                         <div>
-                            <span class="step-num-pill">질문 1</span>
-                            <h2 class="card-title">나이 · 성별 · 키 · 현재 체성분</h2>
+                            <span class="step-num-pill">질문 1 / 5</span>
+                            <h2 class="card-title">현재 나이, 성별, 키와 몸무게를 알려주세요.</h2>
                         </div>
                         <button type="button" id="btn-onboard-auto-estimate" class="btn-outline-lime">
                             인바디 모름 (키·체중으로 골격근·체지방 자동 추정)
                         </button>
                     </div>
-                    <p class="card-subtitle" style="margin-bottom: 12px;">
-                        오늘 측정하거나 알고 계신 몸무게를 입력하세요. 인바디 수치를 모르면 우측 자동 추정 버튼을 누르면 성별·키·체중 기준으로 계산됩니다.
+                    <p class="card-subtitle" style="margin-bottom: 14px;">
+                        오늘 측정하거나 알고 계신 몸무게를 입력하세요. 인바디 수치를 모르면 우측 자동 추정 버튼을 누르면 성별·나이·키·체중 기준으로 자동 계산됩니다.
                     </p>
 
                     <div class="form-row-3">
@@ -135,18 +155,26 @@
                             <input type="number" id="onboard-current-fat-pct" class="form-input" min="4" max="60" step="0.1" value="23.5" required />
                         </div>
                     </div>
+
+                    <div class="onboard-step-nav-row single-next">
+                        <button type="button" id="btn-onboard-next-1" class="btn-landing-primary">
+                            다음 질문으로 (2/5 · 운동 목적 및 강도)
+                        </button>
+                    </div>
                 </article>
 
-                <!-- STEP 2: 프로그램 목적 · 운동 횟수 · 운동 강도 · 직업 활동량 -->
-                <article class="card onboarding-step-card">
+                <!-- =========================================================
+                     질문 2 화면 (2/5): 프로그램 목적 · 운동 횟수 · 운동 강도 · 경력
+                     ========================================================= -->
+                <article id="onboard-step-2" class="card onboarding-step-card hidden">
                     <div class="onboarding-step-head">
                         <div>
-                            <span class="step-num-pill">질문 2</span>
-                            <h2 class="card-title">프로그램 목적 · 운동 횟수 및 강도 · 근무 환경</h2>
+                            <span class="step-num-pill">질문 2 / 5</span>
+                            <h2 class="card-title">어떤 목적으로 운동하시나요? 평소 운동 횟수와 강도를 알려주세요.</h2>
                         </div>
                     </div>
-                    <p class="card-subtitle" style="margin-bottom: 12px;">
-                        다이어트(체지방 감량), 바디 리컴포지션(체지방 감량+근성장), 근비대(린매스업), 스트렝스 중 목적을 선택하세요.
+                    <p class="card-subtitle" style="margin-bottom: 14px;">
+                        다이어트(체지방 감량), 바디 리컴포지션(체지방 감량+근성장), 근비대(린매스업), 스트렝스 중 가장 집중하고 싶은 목적과 평소 운동 루틴을 선택하세요.
                     </p>
 
                     <div class="form-group">
@@ -182,6 +210,28 @@
                         </div>
                     </div>
 
+                    <div class="onboard-step-nav-row">
+                        <button type="button" id="btn-onboard-prev-2" class="btn-cancel onboard-prev-btn">이전 질문</button>
+                        <button type="button" id="btn-onboard-next-2" class="btn-landing-primary onboard-next-btn">
+                            다음 질문으로 (3/5 · 직업 및 근무 환경)
+                        </button>
+                    </div>
+                </article>
+
+                <!-- =========================================================
+                     질문 3 화면 (3/5): 직업군 · 근무 형태 · 하루 근무 시간
+                     ========================================================= -->
+                <article id="onboard-step-3" class="card onboarding-step-card hidden">
+                    <div class="onboarding-step-head">
+                        <div>
+                            <span class="step-num-pill">질문 3 / 5</span>
+                            <h2 class="card-title">하루 중 어떤 환경에서 몇 시간 일하시나요?</h2>
+                        </div>
+                    </div>
+                    <p class="card-subtitle" style="margin-bottom: 14px;">
+                        직업군과 근무 중 자세(앉아서/서서/이동), 하루 근무 시간을 선택하면 기초대사량과 합산된 일평균 총 소모 칼로리(TDEE)가 정밀 계산됩니다.
+                    </p>
+
                     <div class="form-row-3">
                         <div class="form-group">
                             <label for="onboard-occupation">직업군</label>
@@ -207,41 +257,141 @@
                             <input type="number" id="onboard-work-hours" class="form-input" min="0" max="18" step="0.5" value="8" required />
                         </div>
                     </div>
+
+                    <div id="onboard-step3-tdee-box" class="tdee-preview-card" style="margin-top: 8px;"></div>
+
+                    <div class="onboard-step-nav-row">
+                        <button type="button" id="btn-onboard-prev-3" class="btn-cancel onboard-prev-btn">이전 질문</button>
+                        <button type="button" id="btn-onboard-next-3" class="btn-landing-primary onboard-next-btn">
+                            다음 질문으로 (4/5 · 평소 식습관 및 칼로리 계산)
+                        </button>
+                    </div>
                 </article>
 
-                <!-- STEP 3: 평소 식습관 조사 -->
-                <article class="card onboarding-step-card">
+                <!-- =========================================================
+                     질문 4 화면 (4/5): 평소 식습관 (다양한 식품군 선택 또는 직접 입력 평균 칼로리 계산)
+                     ========================================================= -->
+                <article id="onboard-step-4" class="card onboarding-step-card hidden">
                     <div class="onboarding-step-head">
                         <div>
-                            <span class="step-num-pill">질문 3</span>
-                            <h2 class="card-title">평소 식습관 (아침 · 점심 · 고정 음료)</h2>
+                            <span class="step-num-pill">질문 4 / 5</span>
+                            <h2 class="card-title">평소 아침·점심 식사와 자주 마시는 음료는 무엇인가요?</h2>
                         </div>
                     </div>
-                    <p class="card-subtitle" style="margin-bottom: 12px;">
-                        평소 자주 드시는 아침과 점심, 커피 습관을 선택하면 일일 목표 칼로리 안에서 저녁에 얼마나 더 먹을 수 있는지 자동 계산해 줍니다.
+                    <p class="card-subtitle" style="margin-bottom: 14px;">
+                        식품군별 대표 메뉴에서 선택하거나, 목록에 없는 음식은 <b>아래 입력창에 직접 음식 이름을 적어 [평균 칼로리 자동 계산]</b>을 누르세요. (예: <code>계란 2개, 사과 반개, 우유</code> 또는 <code>육회비빔밥</code>, <code>순대국밥과 만두 3개</code>)
                     </p>
 
-                    <div class="form-row-3">
+                    <!-- 4-1. 아침 식사 -->
+                    <div class="meal-builder-block">
+                        <div class="meal-builder-title">1) 평소 아침 식습관</div>
                         <div class="form-group">
-                            <label for="onboard-habit-breakfast">평소 아침 식사</label>
+                            <label for="onboard-habit-breakfast">식품군별 아침 프리셋 선택</label>
                             <select id="onboard-habit-breakfast" class="form-input"></select>
                         </div>
+                        <div class="direct-food-calc-row">
+                            <input
+                                type="text"
+                                id="onboard-direct-bf-text"
+                                class="form-input"
+                                placeholder="직접 입력 예: 계란 2개, 통밀식빵 1장, 무가당 두유"
+                            />
+                            <button type="button" id="btn-calc-direct-bf" class="btn-outline-lime btn-calc-food">
+                                평균 칼로리 자동 계산
+                            </button>
+                        </div>
+                        <p id="onboard-direct-bf-breakdown" class="food-breakdown-hint">선택된 아침 메뉴 기준 칼로리와 단백질입니다. 수치를 직접 수정할 수도 있습니다.</p>
+                        <div class="form-row-2" style="margin-top: 8px;">
+                            <div class="form-group" style="margin-bottom: 0;">
+                                <label for="onboard-bf-kcal">아침 평균 칼로리 (kcal)</label>
+                                <input type="number" id="onboard-bf-kcal" class="form-input" min="0" max="2500" step="5" value="480" required />
+                            </div>
+                            <div class="form-group" style="margin-bottom: 0;">
+                                <label for="onboard-bf-pro">아침 평균 단백질 (g)</label>
+                                <input type="number" id="onboard-bf-pro" class="form-input" min="0" max="200" step="1" value="40" required />
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- 4-2. 점심 식사 -->
+                    <div class="meal-builder-block">
+                        <div class="meal-builder-title">2) 평소 점심 식습관 (구내식당 · 한식 · 중식 · 일식 · 분식 · 양식 · 포케 등)</div>
                         <div class="form-group">
-                            <label for="onboard-habit-lunch">평소 점심 주메뉴</label>
+                            <label for="onboard-habit-lunch">식품군별 점심 주메뉴 선택</label>
                             <select id="onboard-habit-lunch" class="form-input"></select>
                         </div>
+                        <div class="direct-food-calc-row">
+                            <input
+                                type="text"
+                                id="onboard-direct-lc-text"
+                                class="form-input"
+                                placeholder="직접 입력 예: 육회비빔밥 / 순대국밥, 만두 3개 / 제육덮밥"
+                            />
+                            <button type="button" id="btn-calc-direct-lc" class="btn-outline-lime btn-calc-food">
+                                평균 칼로리 자동 계산
+                            </button>
+                        </div>
+                        <p id="onboard-direct-lc-breakdown" class="food-breakdown-hint">선택된 점심 메뉴 기준 칼로리와 단백질입니다. 수치를 직접 수정할 수도 있습니다.</p>
+                        <div class="form-row-2" style="margin-top: 8px;">
+                            <div class="form-group" style="margin-bottom: 0;">
+                                <label for="onboard-lc-kcal">점심 평균 칼로리 (kcal)</label>
+                                <input type="number" id="onboard-lc-kcal" class="form-input" min="0" max="3000" step="10" value="1100" required />
+                            </div>
+                            <div class="form-group" style="margin-bottom: 0;">
+                                <label for="onboard-lc-pro">점심 평균 단백질 (g)</label>
+                                <input type="number" id="onboard-lc-pro" class="form-input" min="0" max="200" step="1" value="32" required />
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- 4-3. 고정 커피·음료·간식 -->
+                    <div class="meal-builder-block">
+                        <div class="meal-builder-title">3) 평소 고정 커피 · 음료 · 간식 습관</div>
                         <div class="form-group">
-                            <label for="onboard-habit-drink">평소 고정 커피·음료</label>
+                            <label for="onboard-habit-drink">자주 마시는 커피·음료·간식 선택</label>
                             <select id="onboard-habit-drink" class="form-input"></select>
                         </div>
+                        <div class="direct-food-calc-row">
+                            <input
+                                type="text"
+                                id="onboard-direct-dr-text"
+                                class="form-input"
+                                placeholder="직접 입력 예: 바닐라라떼 1잔 / 아메리카노, 단백질바 1개"
+                            />
+                            <button type="button" id="btn-calc-direct-dr" class="btn-outline-lime btn-calc-food">
+                                평균 칼로리 자동 계산
+                            </button>
+                        </div>
+                        <p id="onboard-direct-dr-breakdown" class="food-breakdown-hint">선택된 음료·간식 기준 칼로리와 단백질입니다.</p>
+                        <div class="form-row-2" style="margin-top: 8px;">
+                            <div class="form-group" style="margin-bottom: 0;">
+                                <label for="onboard-dr-kcal">음료·간식 평균 칼로리 (kcal)</label>
+                                <input type="number" id="onboard-dr-kcal" class="form-input" min="0" max="1500" step="5" value="174" required />
+                            </div>
+                            <div class="form-group" style="margin-bottom: 0;">
+                                <label for="onboard-dr-pro">음료·간식 평균 단백질 (g)</label>
+                                <input type="number" id="onboard-dr-pro" class="form-input" min="0" max="100" step="1" value="5" required />
+                            </div>
+                        </div>
+                    </div>
+
+                    <div id="onboard-step4-diet-summary" class="tdee-preview-card"></div>
+
+                    <div class="onboard-step-nav-row">
+                        <button type="button" id="btn-onboard-prev-4" class="btn-cancel onboard-prev-btn">이전 질문</button>
+                        <button type="button" id="btn-onboard-next-4" class="btn-landing-primary onboard-next-btn">
+                            다음 질문으로 (5/5 · 목표 및 추천 기간 확인)
+                        </button>
                     </div>
                 </article>
 
-                <!-- STEP 4: 목표 설정 & 기간 앞당기기/늘리기 + 학술 논문 근거 장단점 시뮬레이터 -->
-                <article class="card onboarding-step-card onboarding-highlight-card">
+                <!-- =========================================================
+                     질문 5 화면 (5/5): 목표 설정 & 기간 앞당기기/늘리기 + 학술 논문 근거 장단점 시뮬레이터
+                     ========================================================= -->
+                <article id="onboard-step-5" class="card onboarding-step-card onboarding-highlight-card hidden">
                     <div class="onboarding-step-head">
                         <div>
-                            <span class="step-num-pill">질문 4 · 핵심 설계</span>
+                            <span class="step-num-pill">질문 5 / 5 · 최종 목표 및 기간 설계</span>
                             <h2 class="card-title">추천 목표 및 도달 일수 설정 (앞당기기 / 늘리기 논문 분석)</h2>
                         </div>
                         <button type="button" id="btn-onboard-recommend-targets" class="btn-outline-lime">
@@ -249,7 +399,7 @@
                         </button>
                     </div>
                     <p class="card-subtitle" style="margin-bottom: 12px;">
-                        위 질문 응답을 바탕으로 안정적인 도달 목표와 <b>추천 소요 일수</b>를 계산했습니다. 목표 체중이나 <b>목표 도달 일수를 앞당기거나 늘리면</b> 대규모 표본 및 다수 인용 논문을 근거로 장단점이 실시간 분석됩니다.
+                        질문 1~4의 응답을 바탕으로 안정적인 도달 목표와 <b>추천 소요 일수</b>를 계산했습니다. 목표 체중이나 <b>목표 도달 일수를 앞당기거나 늘리면</b> 대규모 표본 및 다수 인용 논문을 근거로 장단점이 실시간 분석됩니다.
                     </p>
 
                     <div class="form-row-3">
@@ -343,8 +493,9 @@
                         </div>
                     </div>
 
-                    <div class="onboarding-submit-row">
-                        <button type="submit" id="btn-onboard-submit" class="btn-landing-primary">
+                    <div class="onboard-step-nav-row">
+                        <button type="button" id="btn-onboard-prev-5" class="btn-cancel onboard-prev-btn">이전 질문</button>
+                        <button type="submit" id="btn-onboard-submit" class="btn-landing-primary onboard-next-btn">
                             이 설계로 내 1주차 대시보드 시작하기
                         </button>
                     </div>
@@ -994,10 +1145,21 @@
             </p>
 
             <form id="form-habit-builder">
-                <div class="form-section-label">1. 아침 식습관 선택 및 칼로리 보정</div>
+                <div class="form-section-label">1. 아침 식습관 선택 또는 음식 직접 입력 평균 칼로리 계산</div>
                 <div class="form-group">
-                    <label for="select-habit-breakfast">평소 아침 식사 유형</label>
+                    <label for="select-habit-breakfast">식품군별 아침 식사 유형</label>
                     <select id="select-habit-breakfast" class="form-input"></select>
+                </div>
+                <div class="direct-food-calc-row" style="margin-bottom: 10px;">
+                    <input
+                        type="text"
+                        id="input-modal-direct-bf"
+                        class="form-input"
+                        placeholder="직접 음식 입력 (예: 계란 2개, 통밀식빵 1장, 두유)"
+                    />
+                    <button type="button" id="btn-modal-calc-bf" class="btn-outline-lime btn-calc-food">
+                        평균 칼로리 계산
+                    </button>
                 </div>
                 <div class="form-group">
                     <label for="input-habit-bf-title">아침 고정 루틴 이름</label>
@@ -1022,10 +1184,21 @@
                     </div>
                 </div>
 
-                <div class="form-section-label">2. 점심 식습관 (구내식당·외식 어림 계산)</div>
+                <div class="form-section-label">2. 점심 식습관 선택 또는 음식 직접 입력 평균 칼로리 계산</div>
                 <div class="form-group">
-                    <label for="select-habit-lunch-main">점심 주메뉴 유형 (예: 구내식당 설렁탕 약 1,100kcal)</label>
+                    <label for="select-habit-lunch-main">식품군별 점심 주메뉴 유형 (구내식당·한식·중식·일식·분식·양식·포케 등)</label>
                     <select id="select-habit-lunch-main" class="form-input"></select>
+                </div>
+                <div class="direct-food-calc-row" style="margin-bottom: 10px;">
+                    <input
+                        type="text"
+                        id="input-modal-direct-lc"
+                        class="form-input"
+                        placeholder="직접 음식 입력 (예: 육회비빔밥 / 순대국밥, 만두 3개)"
+                    />
+                    <button type="button" id="btn-modal-calc-lc" class="btn-outline-lime btn-calc-food">
+                        평균 칼로리 계산
+                    </button>
                 </div>
                 <div class="form-row-4">
                     <div class="form-group">
@@ -1046,10 +1219,21 @@
                     </div>
                 </div>
 
-                <div class="form-section-label">3. 고정 커피·음료 습관 (점심 합산)</div>
+                <div class="form-section-label">3. 고정 커피·음료·간식 습관 (점심 합산)</div>
                 <div class="form-group">
-                    <label for="select-habit-drink">매일 마시는 고정 커피·음료 (예: GS25 바리스타 커피 174kcal)</label>
+                    <label for="select-habit-drink">매일 마시는 고정 커피·음료·간식</label>
                     <select id="select-habit-drink" class="form-input"></select>
+                </div>
+                <div class="direct-food-calc-row" style="margin-bottom: 10px;">
+                    <input
+                        type="text"
+                        id="input-modal-direct-dr"
+                        class="form-input"
+                        placeholder="직접 음료·간식 입력 (예: 바닐라라떼 1잔 / 아메리카노, 단백질바)"
+                    />
+                    <button type="button" id="btn-modal-calc-dr" class="btn-outline-lime btn-calc-food">
+                        평균 칼로리 계산
+                    </button>
                 </div>
                 <div class="form-row-4">
                     <div class="form-group">
