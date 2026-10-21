@@ -282,7 +282,7 @@
                         </button>
                     </div>
                     <p class="card-subtitle" style="margin-bottom: 14px;">
-                        아침, 점심, 저녁뿐만 아니라 <b>2끼 단식 식단부터 4~5끼 분할식</b>까지 <b>[끼니 추가] / [삭제]</b>하여 자유롭게 설정할 수 있습니다. 각 끼니마다 음식을 <b>직접 수기로 적어 [평균 칼로리 자동 계산]</b>을 누르면 그램수(g)와 조각(슬라이스) 단위까지 정확하게 계산됩니다.
+                        과일, 단백질·육류, 곡류, 채소, 음료, 외식 등 <b>식품군별 카테고리에서 음식을 선택하고 수량·중량(개/g/ml)을 설정하여</b> 내 평소 식단을 쉽고 정확하게 조합할 수 있습니다. <b>[끼니 추가] / [삭제]</b>로 2끼 단식부터 4~5끼 분할식까지 자유롭게 구성 가능합니다.
                     </p>
 
                     <!-- 동적 끼니 목록 렌더링 영역 (아침, 점심, 저녁, 간식/음료 등) -->
@@ -537,207 +537,17 @@
                 </div>
             </article>
 
-            <!-- 2. 일일 영양 합계 대시보드 (2,250 kcal & 단백질 160g 방어) -->
-            <article class="card">
-                <div class="kcal-top-row">
-                    <div>
-                        <p id="kcal-header-target" class="card-subtitle">일일 에너지 밸런스 (목표 2,250 kcal)</p>
-                        <div>
-                            <span id="kcal-consumed-val" class="kcal-big-number">0</span>
-                            <span id="kcal-target-val" class="kcal-unit-sub">/ 2,250 kcal</span>
-                        </div>
-                    </div>
-                    <div class="kcal-adjust-pill">
-                        <button type="button" id="btn-kcal-minus" class="btn-kcal-step" title="목표 -50kcal">-</button>
-                        <span>목표 조절</span>
-                        <button type="button" id="btn-kcal-plus" class="btn-kcal-step" title="목표 +50kcal">+</button>
-                    </div>
-                </div>
-
-                <!-- 직업군 · 근무시간 · 근무형태(좌식/입식) 기반 일평균 칼로리 소모량(TDEE) 분석 박스 -->
-                <div id="tdee-summary-box" class="tdee-info-banner">
-                    <div class="tdee-info-top">
-                        <div>
-                            <strong id="tdee-occupation-title" class="text-lime">직업·근무환경 기반 일평균 소모 칼로리(TDEE)</strong>
-                            <p id="tdee-occupation-sub" class="tdee-sub-line">-</p>
-                        </div>
-                        <button type="button" class="btn-outline-lime js-open-goal-modal">직업·활동량 설정</button>
-                    </div>
-                    <div id="tdee-breakdown-text" class="tdee-breakdown-row"></div>
-                </div>
-
-                <div class="progress-track">
-                    <div id="kcal-progress-bar" class="progress-fill bg-blue" style="width: 0%;"></div>
-                </div>
-                <div class="progress-meta-row">
-                    <span id="kcal-remaining-text" class="text-blue font-bold">남은 섭취 가능 칼로리: 2,250 kcal</span>
-                    <span id="kcal-progress-pct" class="card-subtitle">0%</span>
-                </div>
-
-                <!-- 단백질 160g 방어 하이라이트 배너 -->
-                <div id="protein-defense-banner" class="protein-banner pending">
-                    <h4 id="protein-defense-title">골격근 41kg 방어를 위해 단백질 160g 추가 필요</h4>
-                    <p id="protein-defense-sub">현재 단백질 0g / 목표 160g 이상</p>
-                </div>
-
-                <!-- 탄/단/지 도넛 차트 & 바 게이지 -->
-                <div class="macro-grid">
-                    <div class="donut-wrap">
-                        <canvas id="canvas-macro-donut"></canvas>
-                        <div class="donut-center-label">
-                            <span>단백질</span>
-                            <strong id="donut-protein-val">0g</strong>
-                            <span id="donut-protein-target">/ 160g</span>
-                        </div>
-                    </div>
-
-                    <div class="macro-bars-col">
-                        <div class="macro-bar-item">
-                            <div class="macro-bar-head">
-                                <strong>단백질 (필수 방어)</strong>
-                                <span id="macro-protein-text" class="text-lime font-bold">0g / 160g</span>
-                            </div>
-                            <div class="progress-track">
-                                <div id="macro-protein-bar" class="progress-fill bg-lime" style="width: 0%;"></div>
-                            </div>
-                        </div>
-
-                        <div class="macro-bar-item">
-                            <div class="macro-bar-head">
-                                <strong>탄수화물 (저녁 제한)</strong>
-                                <span id="macro-carbs-text" class="text-warning font-bold">0g / 210g</span>
-                            </div>
-                            <div class="progress-track">
-                                <div id="macro-carbs-bar" class="progress-fill bg-warning" style="width: 0%;"></div>
-                            </div>
-                        </div>
-
-                        <div class="macro-bar-item">
-                            <div class="macro-bar-head">
-                                <strong>지방 (건강한 지방)</strong>
-                                <span id="macro-fat-text" class="text-purple font-bold">0g / 85g</span>
-                            </div>
-                            <div class="progress-track">
-                                <div id="macro-fat-bar" class="progress-fill bg-purple" style="width: 0%;"></div>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-            </article>
-
-            <!-- 3. 아침/점심 고정 루틴 원클릭 등록 (식습관 맞춤 계산기 연동) -->
+            <!-- 2. 내 맞춤 평소 식습관 & 일평균 영양 요약 -->
             <article class="card">
                 <div class="card-header-row" style="margin-bottom: 6px;">
                     <div>
-                        <h2 class="card-title">원클릭 고정 식단 루틴 등록</h2>
-                        <p class="section-sub" style="margin-bottom: 0;">평소 먹는 아침·구내식당 점심·고정 커피 습관을 바탕으로 칼로리를 정확히 계산하고 원터치로 기록하세요.</p>
+                        <h2 class="card-title">내 맞춤 평소 식습관 & 일평균 영양 기준</h2>
+                        <p class="section-sub" style="margin-bottom: 0;">식품 조합기로 설정한 끼니별 음식과 일평균 칼로리·단백질 요약입니다.</p>
                     </div>
-                    <button type="button" id="btn-open-habit-modal" class="btn-outline-lime">식습관 칼로리 계산기</button>
+                    <button type="button" id="btn-open-habit-modal" class="btn-outline-lime">식습관 식품 조합기</button>
                 </div>
 
-                <div class="routine-list" style="margin-top: 12px;">
-                    <div id="routine-card-breakfast" class="routine-item">
-                        <div class="routine-info">
-                            <h4 id="routine-title-breakfast">아침 고정 루틴 (계란 3 + 사과 1 + 쉐이크)</h4>
-                            <p id="routine-sub-breakfast">훈제/삶은 계란 3알 + 사과 1개 + 단백질 쉐이크 1스쿱</p>
-                            <span id="routine-badge-breakfast" class="routine-badge text-lime">480 kcal · 단백질 40g · 탄수 32g · 지방 18g</span>
-                        </div>
-                        <button type="button" id="btn-toggle-breakfast" class="btn-routine-action">원클릭 등록</button>
-                    </div>
-
-                    <div id="routine-card-lunch" class="routine-item">
-                        <div class="routine-info">
-                            <h4 id="routine-title-lunch">점심 고정 루틴 (구내식당 설렁탕 등 + GS25 바리스타 커피)</h4>
-                            <p id="routine-sub-lunch">구내식당 식사(설렁탕 기준 약 1,100 kcal) + GS25 바리스타 커피(174 kcal)</p>
-                            <span id="routine-badge-lunch" class="routine-badge text-blue">1,274 kcal · 단백질 37g · 탄수 159g · 지방 52g</span>
-                        </div>
-                        <button type="button" id="btn-toggle-lunch" class="btn-routine-action">원클릭 등록</button>
-                    </div>
-
-                    <div id="routine-card-booster" class="routine-item">
-                        <div class="routine-info">
-                            <h4 id="routine-title-booster">단백질 160g 방어용 WPI 쉐이크 1.5스쿱</h4>
-                            <p id="routine-sub-booster">아침+점심+저녁 외 부족 단백질(38g) 즉각 보충</p>
-                            <span id="routine-badge-booster" class="routine-badge text-purple">180 kcal · 단백질 38g · 탄수 3g · 지방 2g</span>
-                        </div>
-                        <button type="button" id="btn-toggle-booster" class="btn-routine-action">원클릭 등록</button>
-                    </div>
-                </div>
-            </article>
-
-            <!-- 4. 저녁 권장 가이드 (초저탄수 + 고단백 + 쌈채소) -->
-            <article class="card">
-                <h2 class="card-title">저녁 권장 가이드 (초저탄수 + 고단백 + 채소)</h2>
-                <p id="dinner-guide-subtitle" class="section-sub">권장 타깃: 550~600 kcal / 단백질 50~55g / 탄수화물 10g 이하 제한</p>
-                <div id="dinner-guide-list" class="routine-list"></div>
-            </article>
-
-            <!-- 5. 일일 필수 영양제 & 수분 섭취 체크리스트 -->
-            <article class="card">
-                <h2 class="card-title">일일 필수 영양제 & 수분 체크리스트</h2>
-
-                <div class="checklist-row">
-                    <div>
-                        <h4>크레아틴 모노하이드레이트 5g</h4>
-                        <p>고중량 스트렝스 유지 & 근세포 수분 보유 필수</p>
-                    </div>
-                    <input type="checkbox" id="switch-creatine" class="toggle-input" />
-                </div>
-
-                <div class="checklist-row">
-                    <div>
-                        <h4>프로바이오틱스 (유산균) 복용</h4>
-                        <p>고단백(160g+) 식단 소화 흡수 및 장 환경 개선</p>
-                    </div>
-                    <input type="checkbox" id="switch-probiotics" class="toggle-input" />
-                </div>
-
-                <div class="water-box">
-                    <div class="progress-meta-row" style="margin-top: 0; margin-bottom: 8px;">
-                        <div>
-                            <h4 style="font-size: 13.5px;">일일 수분 섭취량 (목표 2.5L~3.0L)</h4>
-                            <p style="font-size: 11px; color: var(--text-secondary);">크레아틴 복용 시 최소 2.5L 이상 수분 섭취 필수</p>
-                        </div>
-                        <strong id="water-status-text" class="text-blue">0.00L / 2.8L</strong>
-                    </div>
-                    <div class="progress-track dark-track">
-                        <div id="water-progress-bar" class="progress-fill bg-blue" style="width: 0%;"></div>
-                    </div>
-                    <div class="water-btn-row">
-                        <button type="button" id="btn-water-250" class="btn-water text-blue">+250ml (한 컵)</button>
-                        <button type="button" id="btn-water-500" class="btn-water text-lime">+500ml (생수병)</button>
-                        <button type="button" id="btn-water-reset" class="btn-water">초기화</button>
-                    </div>
-                </div>
-            </article>
-
-            <!-- 6. 주 4회 운동 프로그램 가이드 & 천국의 계단 체크 -->
-            <article class="card">
-                <div class="card-header-row">
-                    <div>
-                        <h2 class="card-title">주 4회 운동 루틴 & 천국의 계단</h2>
-                        <p id="weekly-workout-badge" class="section-sub text-lime font-bold">이번 주 운동 달성: 0일 / 목표 4회</p>
-                    </div>
-                    <button type="button" id="btn-open-workout-modal" class="btn-outline-lime">세트 기록 추가</button>
-                </div>
-
-                <div class="checklist-row">
-                    <div>
-                        <h4>대근육 헬스 기구 웨이트 50분 세션</h4>
-                        <p>가슴·등·하체·어깨 머신 중심 점진적 과부하</p>
-                    </div>
-                    <input type="checkbox" id="check-weight-50m" class="toggle-input" />
-                </div>
-
-                <div class="checklist-row">
-                    <div>
-                        <h4>천국의 계단 (StairMaster) 7~10분 인터벌</h4>
-                        <p>웨이트 직후 짧고 강렬한 EPOC 심폐 유산소 마무리</p>
-                    </div>
-                    <input type="checkbox" id="check-stairmaster" class="toggle-input" />
-                </div>
-
-                <div id="workout-sets-list" style="margin-top: 10px;"></div>
+                <div id="dashboard-diet-summary-list" class="routine-list" style="margin-top: 12px;"></div>
             </article>
         </section>
 
@@ -1063,134 +873,30 @@
     </div>
 
     <!-- =================================================================
-         모달 5: 식습관 기반 나만의 고정 식단 칼로리 계산기
-         (예: 아침 계란3+사과1 / 점심 구내식당 설렁탕 1,100kcal + GS25 바리스타 커피 174kcal)
+         모달: 식습관 식품 조합기 (카테고리별 아이템 선택 및 수량 조합)
          ================================================================= -->
     <div id="modal-habit-builder" class="modal-backdrop hidden">
         <div class="modal-card modal-card-wide modal-scrollable">
-            <h3>식습관 기반 나만의 고정 식단 칼로리 계산기</h3>
-            <p class="modal-sub">
-                평소 아침 식사(예: 계란 3개 + 사과 1개), 점심 구내식당/외식 메뉴(예: 설렁탕 약 1,100kcal), 고정 음료(예: GS25 바리스타 커피 174kcal)를 선택하거나 직접 입력하면, 하루 고정 섭취량과 저녁에 허용된 잔여 칼로리·단백질을 자동으로 계산해 원클릭 루틴으로 등록합니다.
-            </p>
+            <div class="onboarding-step-head" style="margin-bottom: 10px;">
+                <div>
+                    <h3>식습관 식품 조합기</h3>
+                    <p class="modal-sub" style="margin-bottom: 0;">
+                        과일, 육류, 곡류, 채소, 음료 등 원하는 식품을 카테고리별로 선택하여 평소 식단을 조합하세요.
+                    </p>
+                </div>
+                <button type="button" id="btn-add-modal-meal" class="btn-outline-lime">
+                    + 끼니 추가
+                </button>
+            </div>
 
-            <form id="form-habit-builder">
-                <div class="form-section-label">1. 아침 식습관 선택 또는 음식 직접 입력 평균 칼로리 계산</div>
-                <div class="form-group">
-                    <label for="select-habit-breakfast">식품군별 아침 식사 유형</label>
-                    <select id="select-habit-breakfast" class="form-input"></select>
-                </div>
-                <div class="direct-food-calc-row" style="margin-bottom: 10px;">
-                    <input
-                        type="text"
-                        id="input-modal-direct-bf"
-                        class="form-input"
-                        placeholder="직접 음식 입력 (예: 계란 2개, 통밀식빵 1장, 두유)"
-                    />
-                    <button type="button" id="btn-modal-calc-bf" class="btn-outline-lime btn-calc-food">
-                        평균 칼로리 계산
-                    </button>
-                </div>
-                <div class="form-group">
-                    <label for="input-habit-bf-title">아침 고정 루틴 이름</label>
-                    <input type="text" id="input-habit-bf-title" class="form-input" required />
-                </div>
-                <div class="form-row-4">
-                    <div class="form-group">
-                        <label for="input-habit-bf-kcal">칼로리 (kcal)</label>
-                        <input type="number" step="5" id="input-habit-bf-kcal" class="form-input" required />
-                    </div>
-                    <div class="form-group">
-                        <label for="input-habit-bf-pro">단백질 (g)</label>
-                        <input type="number" step="1" id="input-habit-bf-pro" class="form-input" required />
-                    </div>
-                    <div class="form-group">
-                        <label for="input-habit-bf-carb">탄수화물 (g)</label>
-                        <input type="number" step="1" id="input-habit-bf-carb" class="form-input" required />
-                    </div>
-                    <div class="form-group">
-                        <label for="input-habit-bf-fat">지방 (g)</label>
-                        <input type="number" step="1" id="input-habit-bf-fat" class="form-input" required />
-                    </div>
-                </div>
+            <div id="modal-meal-slots-container" style="margin-top: 14px;"></div>
 
-                <div class="form-section-label">2. 점심 식습관 선택 또는 음식 직접 입력 평균 칼로리 계산</div>
-                <div class="form-group">
-                    <label for="select-habit-lunch-main">식품군별 점심 주메뉴 유형 (구내식당·한식·중식·일식·분식·양식·포케 등)</label>
-                    <select id="select-habit-lunch-main" class="form-input"></select>
-                </div>
-                <div class="direct-food-calc-row" style="margin-bottom: 10px;">
-                    <input
-                        type="text"
-                        id="input-modal-direct-lc"
-                        class="form-input"
-                        placeholder="직접 음식 입력 (예: 육회비빔밥 / 순대국밥, 만두 3개)"
-                    />
-                    <button type="button" id="btn-modal-calc-lc" class="btn-outline-lime btn-calc-food">
-                        평균 칼로리 계산
-                    </button>
-                </div>
-                <div class="form-row-4">
-                    <div class="form-group">
-                        <label for="input-habit-lc-kcal">점심 식사 (kcal)</label>
-                        <input type="number" step="10" id="input-habit-lc-kcal" class="form-input" required />
-                    </div>
-                    <div class="form-group">
-                        <label for="input-habit-lc-pro">단백질 (g)</label>
-                        <input type="number" step="1" id="input-habit-lc-pro" class="form-input" required />
-                    </div>
-                    <div class="form-group">
-                        <label for="input-habit-lc-carb">탄수화물 (g)</label>
-                        <input type="number" step="1" id="input-habit-lc-carb" class="form-input" required />
-                    </div>
-                    <div class="form-group">
-                        <label for="input-habit-lc-fat">지방 (g)</label>
-                        <input type="number" step="1" id="input-habit-lc-fat" class="form-input" required />
-                    </div>
-                </div>
+            <div id="modal-meal-summary-box" class="tdee-preview-card" style="margin: 12px 0;"></div>
 
-                <div class="form-section-label">3. 고정 커피·음료·간식 습관 (점심 합산)</div>
-                <div class="form-group">
-                    <label for="select-habit-drink">매일 마시는 고정 커피·음료·간식</label>
-                    <select id="select-habit-drink" class="form-input"></select>
-                </div>
-                <div class="direct-food-calc-row" style="margin-bottom: 10px;">
-                    <input
-                        type="text"
-                        id="input-modal-direct-dr"
-                        class="form-input"
-                        placeholder="직접 음료·간식 입력 (예: 바닐라라떼 1잔 / 아메리카노, 단백질바)"
-                    />
-                    <button type="button" id="btn-modal-calc-dr" class="btn-outline-lime btn-calc-food">
-                        평균 칼로리 계산
-                    </button>
-                </div>
-                <div class="form-row-4">
-                    <div class="form-group">
-                        <label for="input-habit-dr-kcal">음료 칼로리 (kcal)</label>
-                        <input type="number" step="1" id="input-habit-dr-kcal" class="form-input" required />
-                    </div>
-                    <div class="form-group">
-                        <label for="input-habit-dr-pro">단백질 (g)</label>
-                        <input type="number" step="1" id="input-habit-dr-pro" class="form-input" required />
-                    </div>
-                    <div class="form-group">
-                        <label for="input-habit-dr-carb">탄수화물 (g)</label>
-                        <input type="number" step="1" id="input-habit-dr-carb" class="form-input" required />
-                    </div>
-                    <div class="form-group">
-                        <label for="input-habit-dr-fat">지방 (g)</label>
-                        <input type="number" step="1" id="input-habit-dr-fat" class="form-input" required />
-                    </div>
-                </div>
-
-                <!-- 아침 + 점심 + 고정 음료 합산 및 저녁 잔여 칼로리/단백질 자동 역산 결과 -->
-                <div id="habit-calc-result-box" class="tdee-preview-card"></div>
-
-                <div class="modal-actions">
-                    <button type="button" class="btn-cancel js-close-modal">취소</button>
-                    <button type="submit" class="btn-submit">내 고정 식단 루틴으로 적용</button>
-                </div>
-            </form>
+            <div class="modal-actions">
+                <button type="button" class="btn-cancel js-close-modal">닫기</button>
+                <button type="button" id="btn-save-modal-meals" class="btn-submit">식단 설정 저장</button>
+            </div>
         </div>
     </div>
 

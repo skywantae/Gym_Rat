@@ -562,9 +562,102 @@ export const HabitMealCatalog = {
 };
 
 /**
- * 사용자가 직접 입력한 음식명/식단 텍스트(예: "계란 2개, 사과 반쪽, 우유" 또는 "육회비빔밥", "순대국밥, 만두 3개")를
- * 분석하여 평균적인 칼로리(kcal)와 단백질·탄수화물·지방(g)을 자동 추정하는 영양 사전 및 파서
+ * 식품군별(과일, 단백질·육류, 곡류·밥, 채소·반찬, 유제품·음료, 외식·식사) 표준 영양 사전
+ * 사용자가 직접 카테고리별로 식품을 선택하고 수량/용량을 조절하여 식단을 결합할 수 있습니다.
  */
+export const FoodCategoryCatalog = {
+    categories: [
+        { code: "FRUIT", label: "과일류" },
+        { code: "PROTEIN", label: "단백질·육류·계란" },
+        { code: "GRAIN", label: "곡류·밥·빵" },
+        { code: "VEGE", label: "채소·샐러드·반찬" },
+        { code: "DRINK", label: "유제품·음료·커피" },
+        { code: "MEAL", label: "외식·국밥·식사" }
+    ],
+    items: [
+        // 1. 과일류
+        { id: "apple", category: "FRUIT", name: "사과", unit: "개", defaultQty: 1, baseQty: 1, kcal: 110, pro: 1, carb: 28, fat: 0 },
+        { id: "banana", category: "FRUIT", name: "바나나", unit: "개", defaultQty: 1, baseQty: 1, kcal: 105, pro: 1, carb: 27, fat: 0 },
+        { id: "cherry_tomato", category: "FRUIT", name: "방울토마토 (1접시)", unit: "접시", defaultQty: 1, baseQty: 1, kcal: 35, pro: 1, carb: 8, fat: 0 },
+        { id: "orange", category: "FRUIT", name: "감귤 / 오렌지", unit: "개", defaultQty: 1, baseQty: 1, kcal: 65, pro: 1, carb: 16, fat: 0 },
+        { id: "berries", category: "FRUIT", name: "블루베리 / 딸기 (1컵)", unit: "컵", defaultQty: 1, baseQty: 1, kcal: 85, pro: 1, carb: 21, fat: 0 },
+
+        // 2. 단백질·육류·계란
+        { id: "egg_boiled", category: "PROTEIN", name: "삶은 계란", unit: "개", defaultQty: 1, baseQty: 1, kcal: 70, pro: 6, carb: 1, fat: 5 },
+        { id: "egg_fried", category: "PROTEIN", name: "계란 후라이", unit: "개", defaultQty: 1, baseQty: 1, kcal: 85, pro: 6, carb: 1, fat: 6 },
+        { id: "chicken_breast", category: "PROTEIN", name: "닭가슴살", unit: "g", defaultQty: 100, step: 50, min: 50, max: 500, baseQty: 100, kcal: 120, pro: 24, carb: 1, fat: 2 },
+        { id: "beef_lean", category: "PROTEIN", name: "소고기 살코기 (우둔/안심)", unit: "g", defaultQty: 100, step: 50, min: 50, max: 500, baseQty: 100, kcal: 155, pro: 23, carb: 0, fat: 7 },
+        { id: "pork_lean", category: "PROTEIN", name: "돼지고기 살코기 (안심/등심)", unit: "g", defaultQty: 100, step: 50, min: 50, max: 500, baseQty: 100, kcal: 145, pro: 22, carb: 0, fat: 6 },
+        { id: "pork_belly", category: "PROTEIN", name: "삼겹살", unit: "g", defaultQty: 100, step: 50, min: 50, max: 500, baseQty: 100, kcal: 330, pro: 17, carb: 0, fat: 29 },
+        { id: "spam_slice", category: "PROTEIN", name: "스팸 (슬라이스 조각)", unit: "조각", defaultQty: 3, baseQty: 1, kcal: 85, pro: 3, carb: 1, fat: 8 },
+        { id: "tofu_half", category: "PROTEIN", name: "두부 (1/2모)", unit: "모", defaultQty: 0.5, step: 0.5, baseQty: 0.5, kcal: 120, pro: 12, carb: 3, fat: 6 },
+        { id: "whey_shake", category: "PROTEIN", name: "단백질 쉐이크 (파우더 1스쿱)", unit: "스쿱", defaultQty: 1, baseQty: 1, kcal: 150, pro: 25, carb: 6, fat: 2 },
+        { id: "protein_drink_rtd", category: "PROTEIN", name: "RTD 단백질 음료 (더단백/셀렉스 등)", unit: "팩", defaultQty: 1, baseQty: 1, kcal: 145, pro: 20, carb: 6, fat: 3 },
+        { id: "protein_bar", category: "PROTEIN", name: "단백질바", unit: "개", defaultQty: 1, baseQty: 1, kcal: 195, pro: 14, carb: 20, fat: 7 },
+        { id: "tuna_can", category: "PROTEIN", name: "라이트 참치캔 (1캔)", unit: "캔", defaultQty: 1, baseQty: 1, kcal: 135, pro: 19, carb: 0, fat: 6 },
+        { id: "salmon_grilled", category: "PROTEIN", name: "연어 구이", unit: "g", defaultQty: 100, step: 50, baseQty: 100, kcal: 205, pro: 22, carb: 0, fat: 13 },
+        { id: "mackerel_grilled", category: "PROTEIN", name: "고등어 구이 (반 토막)", unit: "토막", defaultQty: 1, baseQty: 1, kcal: 210, pro: 20, carb: 0, fat: 14 },
+
+        // 3. 곡류·밥·빵
+        { id: "white_rice", category: "GRAIN", name: "쌀밥 (공기밥)", unit: "공기", defaultQty: 1, step: 0.5, baseQty: 1, kcal: 300, pro: 5, carb: 66, fat: 1 },
+        { id: "brown_rice", category: "GRAIN", name: "현미/잡곡밥", unit: "공기", defaultQty: 1, step: 0.5, baseQty: 1, kcal: 290, pro: 6, carb: 63, fat: 2 },
+        { id: "sweet_potato", category: "GRAIN", name: "고구마 (중 1개)", unit: "개", defaultQty: 1, baseQty: 1, kcal: 195, pro: 3, carb: 45, fat: 0 },
+        { id: "potato", category: "GRAIN", name: "감자 (중 1개)", unit: "개", defaultQty: 1, baseQty: 1, kcal: 110, pro: 3, carb: 25, fat: 0 },
+        { id: "oatmeal", category: "GRAIN", name: "오트밀 (1회분)", unit: "회", defaultQty: 1, baseQty: 1, kcal: 175, pro: 6, carb: 30, fat: 3 },
+        { id: "bread_toast", category: "GRAIN", name: "식빵 / 통밀빵", unit: "장", defaultQty: 1, baseQty: 1, kcal: 110, pro: 4, carb: 20, fat: 2 },
+        { id: "bagel", category: "GRAIN", name: "베이글", unit: "개", defaultQty: 1, baseQty: 1, kcal: 280, pro: 9, carb: 54, fat: 3 },
+        { id: "cereal", category: "GRAIN", name: "시리얼 / 그래놀라", unit: "회", defaultQty: 1, baseQty: 1, kcal: 230, pro: 5, carb: 42, fat: 5 },
+        { id: "triangle_gimbap", category: "GRAIN", name: "삼각김밥", unit: "개", defaultQty: 1, baseQty: 1, kcal: 185, pro: 4, carb: 34, fat: 3 },
+        { id: "gimbap", category: "GRAIN", name: "일반 김밥 (1줄)", unit: "줄", defaultQty: 1, baseQty: 1, kcal: 460, pro: 14, carb: 72, fat: 13 },
+
+        // 4. 채소·샐러드·반찬
+        { id: "kimchi", category: "VEGE", name: "김치 (배추/깍두기)", unit: "접시", defaultQty: 1, baseQty: 1, kcal: 18, pro: 1, carb: 3, fat: 0 },
+        { id: "salad_greens", category: "VEGE", name: "샐러드 생채소", unit: "그릇", defaultQty: 1, baseQty: 1, kcal: 25, pro: 1, carb: 4, fat: 0 },
+        { id: "chicken_salad", category: "VEGE", name: "닭가슴살 샐러드", unit: "그릇", defaultQty: 1, baseQty: 1, kcal: 360, pro: 30, carb: 26, fat: 14 },
+        { id: "seasoned_laver", category: "VEGE", name: "조미김 (도시락김)", unit: "봉", defaultQty: 1, baseQty: 1, kcal: 25, pro: 1, carb: 1, fat: 2 },
+        { id: "namul_side", category: "VEGE", name: "나물 반찬 (시금치/콩나물)", unit: "접시", defaultQty: 1, baseQty: 1, kcal: 35, pro: 2, carb: 3, fat: 2 },
+        { id: "eomuk_side", category: "VEGE", name: "어묵 / 진미채 볶음", unit: "접시", defaultQty: 1, baseQty: 1, kcal: 90, pro: 6, carb: 10, fat: 3 },
+
+        // 5. 유제품·음료·커피
+        { id: "barista_coffee", category: "DRINK", name: "GS25 바리스타 커피 (라떼)", unit: "개", defaultQty: 1, baseQty: 1, kcal: 174, pro: 5, carb: 25, fat: 6 },
+        { id: "americano", category: "DRINK", name: "아메리카노 (블랙커피)", unit: "잔", defaultQty: 1, baseQty: 1, kcal: 10, pro: 1, carb: 1, fat: 0 },
+        { id: "cafe_latte", category: "DRINK", name: "카페라떼", unit: "잔", defaultQty: 1, baseQty: 1, kcal: 180, pro: 9, carb: 14, fat: 9 },
+        { id: "mix_coffee", category: "DRINK", name: "믹스커피 (다방커피)", unit: "봉", defaultQty: 1, baseQty: 1, kcal: 55, pro: 0.5, carb: 9, fat: 2 },
+        { id: "milk_white", category: "DRINK", name: "흰우유 (200ml)", unit: "팩", defaultQty: 1, baseQty: 1, kcal: 125, pro: 6, carb: 10, fat: 7 },
+        { id: "soy_milk", category: "DRINK", name: "두유 / 아몬드유 (190ml)", unit: "팩", defaultQty: 1, baseQty: 1, kcal: 85, pro: 5, carb: 9, fat: 3 },
+        { id: "greek_yogurt", category: "DRINK", name: "그릭요거트", unit: "개", defaultQty: 1, baseQty: 1, kcal: 140, pro: 12, carb: 8, fat: 6 },
+        { id: "fruit_juice", category: "DRINK", name: "과일주스 / 스무디 / 에이드", unit: "잔", defaultQty: 1, baseQty: 1, kcal: 240, pro: 2, carb: 55, fat: 1 },
+
+        // 6. 외식·국밥·식사
+        { id: "cafeteria_seollongtang", category: "MEAL", name: "구내식당 국밥/탕 (설렁탕·곰탕)", unit: "그릇", defaultQty: 1, baseQty: 1, kcal: 1100, pro: 38, carb: 120, fat: 44 },
+        { id: "cafeteria_meal", category: "MEAL", name: "구내식당 일반 백반 (자율배식)", unit: "인분", defaultQty: 1, baseQty: 1, kcal: 850, pro: 30, carb: 110, fat: 28 },
+        { id: "gukbap_pork", category: "MEAL", name: "순대국밥 / 돼지국밥", unit: "그릇", defaultQty: 1, baseQty: 1, kcal: 960, pro: 42, carb: 102, fat: 42 },
+        { id: "jjigae_kimchi", category: "MEAL", name: "김치찌개 / 된장찌개 정식", unit: "인분", defaultQty: 1, baseQty: 1, kcal: 780, pro: 28, carb: 100, fat: 28 },
+        { id: "jeyuk_bokkeum", category: "MEAL", name: "제육볶음 / 불백 정식", unit: "인분", defaultQty: 1, baseQty: 1, kcal: 920, pro: 38, carb: 106, fat: 36 },
+        { id: "subway_15cm", category: "MEAL", name: "서브웨이 샌드위치 (15cm)", unit: "개", defaultQty: 1, baseQty: 1, kcal: 420, pro: 28, carb: 44, fat: 14 },
+        { id: "pork_cutlet", category: "MEAL", name: "돈까스 정식", unit: "인분", defaultQty: 1, baseQty: 1, kcal: 980, pro: 32, carb: 105, fat: 45 },
+        { id: "ramen_bowl", category: "MEAL", name: "라면 (밥 포함)", unit: "그릇", defaultQty: 1, baseQty: 1, kcal: 620, pro: 12, carb: 88, fat: 20 },
+        { id: "jjajangmyeon", category: "MEAL", name: "짜장면 / 짬뽕", unit: "그릇", defaultQty: 1, baseQty: 1, kcal: 850, pro: 24, carb: 120, fat: 28 },
+        { id: "chicken_half", category: "MEAL", name: "후라이드 치킨 (반 마리)", unit: "회", defaultQty: 1, baseQty: 1, kcal: 890, pro: 52, carb: 48, fat: 54 }
+    ],
+    getItem(id) {
+        return this.items.find(it => it.id === id) || null;
+    },
+    getItemsByCategory(catCode) {
+        return this.items.filter(it => it.category === catCode);
+    },
+    computeNutrients(item, quantity) {
+        if (!item || !quantity || quantity <= 0) return { kcal: 0, pro: 0, carb: 0, fat: 0 };
+        const multiplier = quantity / (item.baseQty || 1);
+        return {
+            kcal: Math.round(item.kcal * multiplier),
+            pro: Math.round(item.pro * multiplier),
+            carb: Math.round(item.carb * multiplier),
+            fat: Math.round(item.fat * multiplier)
+        };
+    }
+};
+
 /**
  * 사용자가 직접 입력한 음식명/식단 텍스트(예: "계란후라이 + 공기밥 + 김치 + 스팸 3조각" 또는 "닭가슴살 200g")를
  * 정밀 분석하여 그램수(g) 및 조각(슬라이스) 단위를 할루시네이션 없이 정확하게 자동 계산하는 영양 사전 및 파서
@@ -1163,6 +1256,18 @@ export class GymRatStorage {
         const serialized = JSON.stringify(merged);
         localStorage.setItem(STORAGE_KEYS.PROFILE, serialized);
         localStorage.setItem(STORAGE_KEYS.PROFILE_BACKUP, serialized);
+    }
+
+    static getCustomOnboardMeals() {
+        this.ensureSeeded();
+        const saved = safeParseArray(localStorage.getItem("gymrat_custom_meals"));
+        if (saved && saved.length > 0) return saved;
+        return null;
+    }
+
+    static saveCustomOnboardMeals(meals) {
+        if (!meals || !Array.isArray(meals)) return;
+        localStorage.setItem("gymrat_custom_meals", JSON.stringify(meals));
     }
 
     static getCustomRoutines() {
