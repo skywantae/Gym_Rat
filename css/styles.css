@@ -17,6 +17,10 @@
     --amber-warning: #D29922;
     --coral-danger: #F85149;
     --purple-accent: #BC8CFF;
+    --safe-top: env(safe-area-inset-top, 0px);
+    --safe-bottom: env(safe-area-inset-bottom, 0px);
+    --safe-left: env(safe-area-inset-left, 0px);
+    --safe-right: env(safe-area-inset-right, 0px);
 }
 
 * {
@@ -26,18 +30,33 @@
     -webkit-tap-highlight-color: transparent;
 }
 
+html,
+body {
+    overflow-x: hidden;
+    width: 100%;
+    -webkit-text-size-adjust: 100%;
+}
+
+button,
+input,
+select {
+    touch-action: manipulation;
+    font-family: inherit;
+}
+
 body {
     background-color: var(--bg-dark);
     color: var(--text-primary);
     font-family: "Pretendard Variable", "Pretendard", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
     line-height: 1.45;
-    padding-bottom: 86px;
+    padding-bottom: calc(92px + var(--safe-bottom));
 }
 
 .app-container {
-    max-width: 540px;
+    width: 100%;
+    max-width: 560px;
     margin: 0 auto;
-    padding: 14px 14px 32px;
+    padding: max(14px, var(--safe-top)) max(14px, var(--safe-right)) 32px max(14px, var(--safe-left));
 }
 
 .hidden {
@@ -63,15 +82,24 @@ body {
 /* --- Top Brand Bar --- */
 .top-header {
     display: flex;
+    flex-direction: column;
+    gap: 10px;
+    padding: 6px 2px 14px;
+}
+
+.brand-row {
+    display: flex;
     justify-content: space-between;
     align-items: center;
-    padding: 8px 4px 14px;
+    gap: 8px;
+    width: 100%;
 }
 
 .brand-title {
     display: flex;
     align-items: center;
     gap: 8px;
+    flex-wrap: wrap;
 }
 
 .brand-badge {
@@ -83,28 +111,67 @@ body {
     padding: 3px 8px;
     border-radius: 999px;
     letter-spacing: 0.5px;
+    white-space: nowrap;
+}
+
+.brand-badge-blue {
+    background: rgba(88, 166, 255, 0.16);
+    color: var(--electric-blue);
+    border: 1px solid rgba(88, 166, 255, 0.42);
+    font-size: 10px;
+    font-weight: 800;
+    padding: 3px 8px;
+    border-radius: 999px;
+    letter-spacing: 0.5px;
+    white-space: nowrap;
 }
 
 .brand-title h1 {
-    font-size: 19px;
+    font-size: 20px;
     font-weight: 800;
     letter-spacing: -0.3px;
 }
 
+.btn-cloud-account {
+    background: rgba(88, 166, 255, 0.12);
+    color: var(--electric-blue);
+    border: 1px solid rgba(88, 166, 255, 0.42);
+    border-radius: 999px;
+    padding: 7px 12px;
+    font-size: 12px;
+    font-weight: 700;
+    cursor: pointer;
+    white-space: nowrap;
+    max-width: 190px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    transition: all 0.15s ease;
+}
+
+.btn-cloud-account.active {
+    background: rgba(57, 211, 83, 0.14);
+    color: var(--neon-lime);
+    border-color: rgba(57, 211, 83, 0.55);
+}
+
 .header-actions {
-    display: flex;
+    display: grid;
+    grid-template-columns: 1fr 1fr;
     gap: 8px;
+    width: 100%;
 }
 
 .btn-outline-lime {
     background: rgba(57, 211, 83, 0.1);
     color: var(--neon-lime);
     border: 1px solid rgba(57, 211, 83, 0.45);
-    border-radius: 10px;
-    padding: 8px 12px;
-    font-size: 12px;
+    border-radius: 11px;
+    padding: 9px 12px;
+    min-height: 40px;
+    font-size: 12.5px;
     font-weight: 700;
     cursor: pointer;
+    white-space: nowrap;
     transition: all 0.15s ease;
 }
 
@@ -116,11 +183,13 @@ body {
     background: var(--atflee-orange);
     color: #FFFFFF;
     border: none;
-    border-radius: 10px;
-    padding: 8px 13px;
-    font-size: 12px;
+    border-radius: 11px;
+    padding: 9px 13px;
+    min-height: 40px;
+    font-size: 12.5px;
     font-weight: 700;
     cursor: pointer;
+    white-space: nowrap;
     transition: background 0.15s ease;
 }
 
@@ -1211,4 +1280,535 @@ body {
 .btn-apply-mini:hover {
     background-color: var(--neon-lime);
     color: #071A0A;
+}
+
+/* ==========================================================================
+   Landing Gate (본인 지정 아이디 + PIN 초기 접속 화면)
+   ========================================================================== */
+.landing-gate-wrapper {
+    min-height: 100vh;
+    min-height: 100dvh;
+    width: 100%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: max(18px, var(--safe-top)) max(14px, var(--safe-right)) max(28px, var(--safe-bottom)) max(14px, var(--safe-left));
+    background: radial-gradient(circle at 50% 0%, rgba(57, 211, 83, 0.09) 0%, rgba(13, 17, 23, 0) 60%), var(--bg-dark);
+}
+
+.landing-container {
+    width: 100%;
+    max-width: 520px;
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+}
+
+.landing-hero-pane {
+    padding: 4px 4px 2px;
+}
+
+.landing-main-title {
+    font-size: clamp(28px, 7vw, 38px);
+    font-weight: 900;
+    letter-spacing: -0.8px;
+    margin-top: 8px;
+    color: var(--text-primary);
+}
+
+.landing-main-subtitle {
+    font-size: 13px;
+    color: var(--text-secondary);
+    line-height: 1.5;
+    margin-top: 4px;
+    word-break: keep-all;
+}
+
+.landing-auth-card {
+    background-color: var(--surface-dark);
+    border: 1.5px solid rgba(57, 211, 83, 0.45);
+    border-radius: 22px;
+    padding: 22px 18px;
+    box-shadow: 0 14px 36px rgba(0, 0, 0, 0.45);
+}
+
+.landing-auth-header h2 {
+    font-size: 19px;
+    font-weight: 800;
+    color: var(--text-primary);
+    margin-bottom: 6px;
+}
+
+.landing-auth-header p {
+    font-size: 12.5px;
+    color: var(--text-secondary);
+    line-height: 1.5;
+    margin-bottom: 16px;
+    word-break: keep-all;
+}
+
+.landing-recent-box {
+    background: rgba(57, 211, 83, 0.12);
+    border: 1px solid rgba(57, 211, 83, 0.4);
+    color: var(--neon-lime);
+    font-size: 12px;
+    font-weight: 700;
+    border-radius: 11px;
+    padding: 10px 12px;
+    margin-bottom: 14px;
+    line-height: 1.4;
+}
+
+.landing-input {
+    height: 48px;
+    font-size: 16px;
+    font-weight: 600;
+    padding: 10px 14px;
+    border-radius: 12px;
+    transition: border-color 0.15s ease;
+}
+
+.landing-input:focus {
+    outline: none;
+    border-color: var(--neon-lime);
+}
+
+.pin-input-wrap {
+    position: relative;
+    display: flex;
+    align-items: center;
+}
+
+.pin-input-wrap .landing-input {
+    padding-right: 64px;
+}
+
+.btn-pin-toggle {
+    position: absolute;
+    right: 8px;
+    background: var(--surface-dark);
+    color: var(--text-secondary);
+    border: 1px solid var(--border-subtle);
+    border-radius: 8px;
+    padding: 5px 10px;
+    font-size: 11.5px;
+    font-weight: 700;
+    cursor: pointer;
+}
+
+.landing-status-box {
+    border-radius: 11px;
+    padding: 10px 12px;
+    font-size: 12px;
+    font-weight: 600;
+    margin: 10px 0 12px;
+    line-height: 1.45;
+}
+
+.landing-status-box.info {
+    background: rgba(88, 166, 255, 0.13);
+    border: 1px solid rgba(88, 166, 255, 0.4);
+    color: var(--electric-blue);
+}
+
+.landing-status-box.error {
+    background: rgba(248, 81, 73, 0.14);
+    border: 1px solid rgba(248, 81, 73, 0.45);
+    color: var(--coral-danger);
+}
+
+.btn-landing-primary {
+    width: 100%;
+    min-height: 50px;
+    background: linear-gradient(145deg, #39D353 0%, #2EA043 100%);
+    color: #051608;
+    border: none;
+    border-radius: 13px;
+    font-size: 14.5px;
+    font-weight: 900;
+    cursor: pointer;
+    margin-top: 6px;
+    transition: transform 0.12s ease, opacity 0.15s ease;
+}
+
+.btn-landing-primary:active {
+    transform: scale(0.99);
+}
+
+.btn-landing-primary:disabled {
+    opacity: 0.65;
+    cursor: wait;
+}
+
+.btn-landing-secondary {
+    width: 100%;
+    min-height: 42px;
+    background: transparent;
+    color: var(--text-secondary);
+    border: 1px solid var(--border-subtle);
+    border-radius: 12px;
+    font-size: 12.5px;
+    font-weight: 600;
+    cursor: pointer;
+    margin-top: 10px;
+}
+
+.landing-features-pane {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+}
+
+.landing-feature-item {
+    display: flex;
+    align-items: flex-start;
+    gap: 12px;
+    background-color: rgba(22, 27, 34, 0.85);
+    border: 1px solid var(--border-subtle);
+    border-radius: 16px;
+    padding: 13px 14px;
+}
+
+.feature-num {
+    background: rgba(88, 166, 255, 0.15);
+    color: var(--electric-blue);
+    border: 1px solid rgba(88, 166, 255, 0.38);
+    font-size: 11px;
+    font-weight: 800;
+    padding: 4px 8px;
+    border-radius: 8px;
+    flex-shrink: 0;
+    margin-top: 1px;
+}
+
+.landing-feature-item strong {
+    display: block;
+    font-size: 13px;
+    font-weight: 800;
+    color: var(--text-primary);
+    margin-bottom: 3px;
+}
+
+.landing-feature-item p {
+    font-size: 11.5px;
+    color: var(--text-secondary);
+    line-height: 1.45;
+    word-break: keep-all;
+}
+
+.modal-actions-wrap {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    justify-content: flex-end;
+    margin-top: 18px;
+}
+
+/* ==========================================================================
+   Responsive Optimization System
+   1. iPhone 12~17 Series (Mini, Standard, Pro, Plus, Pro Max) & Galaxy S21~S26 / Z Flip
+   2. Galaxy Z Fold Cover Display (Ultra-Narrow <= 359px)
+   3. iPhone Duo & Galaxy Z Fold Z 8 Wide Unfolded Display (>= 680px & >= 1024px)
+   ========================================================================== */
+
+/* --- A. All Mobile & Touch Devices (<= 767px): Prevent iOS Safari Zoom & Bottom Sheet Modals --- */
+@media (max-width: 767px) {
+    .form-input,
+    select.form-input,
+    input.form-input {
+        font-size: 16px;
+        min-height: 44px;
+    }
+
+    .modal-backdrop {
+        align-items: flex-end;
+        padding: 0;
+    }
+
+    .modal-card,
+    .modal-card.modal-card-wide {
+        max-width: 100%;
+        width: 100%;
+        border-radius: 22px 22px 0 0;
+        border-bottom: none;
+        max-height: 91vh;
+        max-height: 91dvh;
+        padding: 20px 16px calc(20px + var(--safe-bottom));
+        -webkit-overflow-scrolling: touch;
+    }
+
+    .form-row-4 {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 10px;
+    }
+
+    .bottom-nav-inner {
+        padding: 8px max(14px, var(--safe-right)) calc(8px + var(--safe-bottom)) max(14px, var(--safe-left));
+    }
+
+    .toast-banner {
+        bottom: calc(76px + var(--safe-bottom));
+    }
+}
+
+/* --- B. Standard & Large Bar Smartphones (<= 460px: iPhone 12~17 / Galaxy S21~S26 / Z Flip) --- */
+@media (max-width: 460px) {
+    .card {
+        padding: 16px 14px;
+        border-radius: 20px;
+    }
+
+    .card-header-row {
+        flex-wrap: wrap;
+        gap: 8px;
+    }
+
+    .atflee-dual-grid {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 10px;
+    }
+
+    .atflee-box-orange,
+    .atflee-box-white {
+        padding: 14px 8px;
+        min-height: 136px;
+        border-radius: 18px;
+    }
+
+    .atflee-box-orange .box-main-number {
+        font-size: clamp(23px, 6.8vw, 30px);
+    }
+
+    .atflee-box-white .box-target-number {
+        font-size: clamp(21px, 6.4vw, 27px);
+    }
+
+    .tdee-info-top {
+        flex-direction: column;
+        align-items: stretch;
+        gap: 8px;
+    }
+
+    .tdee-info-top .btn-outline-lime {
+        width: 100%;
+        text-align: center;
+    }
+
+    .chart-tooltip-box {
+        flex-direction: column;
+        align-items: stretch;
+        gap: 8px;
+    }
+
+    .tooltip-metrics {
+        display: grid;
+        grid-template-columns: repeat(3, 1fr);
+        gap: 6px;
+        text-align: center;
+        border-top: 1px solid var(--border-subtle);
+        padding-top: 8px;
+    }
+
+    .water-btn-row {
+        display: grid;
+        grid-template-columns: 1fr 1fr auto;
+        gap: 6px;
+    }
+
+    .btn-water {
+        padding: 9px 8px;
+        font-size: 11.5px;
+        white-space: nowrap;
+    }
+
+    .history-card,
+    .workout-set-row {
+        gap: 10px;
+    }
+
+    .btn-text-delete {
+        flex-shrink: 0;
+    }
+
+    .modal-actions-wrap {
+        display: grid;
+        grid-template-columns: auto 1fr 1fr;
+        width: 100%;
+    }
+}
+
+/* --- C. Ultra-Narrow / Galaxy Z Fold Cover Screen & iPhone Mini Zoomed (<= 359px) --- */
+@media (max-width: 359px) {
+    .app-container {
+        padding-left: 10px;
+        padding-right: 10px;
+    }
+
+    .card {
+        padding: 14px 11px;
+        border-radius: 18px;
+    }
+
+    .brand-title h1 {
+        font-size: 17.5px;
+    }
+
+    .btn-cloud-account {
+        font-size: 11px;
+        padding: 6px 9px;
+        max-width: 150px;
+    }
+
+    .atflee-dual-grid {
+        gap: 8px;
+    }
+
+    .atflee-box-orange .box-main-number {
+        font-size: 21px;
+    }
+
+    .atflee-box-white .box-target-number {
+        font-size: 19.5px;
+    }
+
+    .macro-grid {
+        flex-direction: column;
+        align-items: center;
+        gap: 12px;
+    }
+
+    .macro-bars-col {
+        width: 100%;
+    }
+
+    .routine-item {
+        flex-direction: column;
+        align-items: stretch;
+    }
+
+    .btn-routine-action {
+        width: 100%;
+        text-align: center;
+        padding: 9px;
+    }
+
+    .form-row-3 {
+        grid-template-columns: 1fr 1fr;
+    }
+
+    .water-btn-row {
+        grid-template-columns: 1fr 1fr;
+    }
+
+    .water-btn-row .btn-water:last-child {
+        grid-column: span 2;
+    }
+}
+
+/* --- D. Wide Foldable Unfolded Screens & Dual-Screen (iPhone Duo / Galaxy Z Fold Z 8 Wide: >= 680px) --- */
+@media (min-width: 680px) {
+    .landing-container {
+        max-width: 980px;
+        display: grid;
+        grid-template-columns: 1.05fr 0.95fr;
+        grid-template-areas:
+            "hero auth"
+            "features auth";
+        gap: 20px 28px;
+        align-items: center;
+    }
+
+    .landing-hero-pane {
+        grid-area: hero;
+        align-self: end;
+    }
+
+    .landing-auth-card {
+        grid-area: auth;
+        padding: 28px 24px;
+    }
+
+    .landing-features-pane {
+        grid-area: features;
+        align-self: start;
+    }
+
+    .app-container {
+        max-width: 1020px;
+        padding: max(20px, var(--safe-top)) max(24px, var(--safe-right)) 44px max(24px, var(--safe-left));
+    }
+
+    .top-header {
+        flex-direction: row;
+        justify-content: space-between;
+        align-items: center;
+        padding: 8px 4px 18px;
+    }
+
+    .brand-row {
+        width: auto;
+        justify-content: flex-start;
+        gap: 12px;
+    }
+
+    .btn-cloud-account {
+        max-width: 260px;
+    }
+
+    .header-actions {
+        width: auto;
+        display: flex;
+        gap: 10px;
+    }
+
+    /* 갤럭시 폴드 Z8 와이드 / 아이폰 듀오 2열 벤토 그리드 대시보드 */
+    #screen-dashboard {
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 18px;
+        align-items: stretch;
+    }
+
+    #screen-dashboard > .card {
+        margin-bottom: 0;
+        display: flex;
+        flex-direction: column;
+        justify-content: space-between;
+    }
+
+    #weight-history-list {
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 12px;
+    }
+
+    #weight-history-list .history-card {
+        margin-bottom: 0;
+    }
+
+    .bottom-nav-inner {
+        max-width: 680px;
+        gap: 12px;
+        padding: 10px 24px calc(10px + var(--safe-bottom));
+    }
+
+    .modal-card {
+        max-width: 520px;
+        padding: 24px;
+    }
+
+    .modal-card.modal-card-wide {
+        max-width: 660px;
+    }
+}
+
+/* --- E. Extra-Wide Foldable Landscape / Desktop (>= 1080px) --- */
+@media (min-width: 1080px) {
+    .app-container {
+        max-width: 1140px;
+    }
+
+    #screen-dashboard {
+        gap: 22px;
+    }
 }

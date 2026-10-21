@@ -25,12 +25,24 @@ class GymRatApp {
     init() {
         GymRatStorage.ensureSeeded();
         this.bindStaticEvents();
-        this.renderAll();
-        window.addEventListener("resize", () => {
-            if (this.activeBottomNav === "graph") {
-                this.renderGraphScreen();
-            }
-        });
+        this.initLandingGate();
+
+        const handleViewportChange = () => {
+            if (this.resizeRaf) cancelAnimationFrame(this.resizeRaf);
+            this.resizeRaf = requestAnimationFrame(() => {
+                const mainEl = document.getElementById("app-main");
+                if (mainEl && !mainEl.classList.contains("hidden")) {
+                    if (this.activeBottomNav === "graph") {
+                        this.renderGraphScreen();
+                    } else {
+                        this.renderDashboardScreen();
+                    }
+                }
+            });
+        };
+
+        window.addEventListener("resize", handleViewportChange);
+        window.addEventListener("orientationchange", handleViewportChange);
     }
 
     showToast(message) {
@@ -240,6 +252,34 @@ class GymRatApp {
             }
         });
 
+        // 랜딩 페이지(아이디 + PIN 게이트) 폼 및 액션 이벤트
+        const landingForm = document.getElementById("form-landing-auth");
+        if (landingForm) {
+            landingForm.addEventListener("submit", e => {
+                e.preventDefault();
+                this.handleLandingAuthSubmit();
+            });
+        }
+
+        const togglePinBtn = document.getElementById("btn-toggle-landing-pin");
+        if (togglePinBtn) {
+            togglePinBtn.addEventListener("click", () => {
+                const pinEl = document.getElementById("landing-input-pin");
+                if (!pinEl) return;
+                const isHidden = pinEl.type === "password";
+                pinEl.type = isHidden ? "text" : "password";
+                togglePinBtn.textContent = isHidden ? "숨김" : "표시";
+            });
+        }
+
+        const localOnlyBtn = document.getElementById("btn-landing-local-only");
+        if (localOnlyBtn) {
+            localOnlyBtn.addEventListener("click", () => {
+                this.enterMainDashboard();
+                this.showToast("오프라인/로컬 기기 모드로 열렸습니다. 상단 [클라우드 동기화]에서 언제든 연결할 수 있습니다.");
+            });
+        }
+
         // 클라우드 동기화 모달 및 액션 버튼 이벤트
         document.getElementById("btn-open-sync-modal").addEventListener("click", () => {
             this.openCloudSyncModal();
@@ -277,6 +317,7 @@ class GymRatApp {
             const tpl = customRoutines.BREAKFAST_FIXED;
             const added = GymRatStorage.toggleTemplateDiet(this.todayStr, tpl);
             this.renderDashboardScreen();
+            FirebaseSyncService.autoSyncIfActive();
             this.showToast(
                 added
                     ? `${tpl.title} 등록 완료 (+${tpl.caloriesKcal} kcal / 단백질 +${tpl.proteinG}g)`
@@ -289,6 +330,7 @@ class GymRatApp {
             const tpl = customRoutines.LUNCH_FIXED;
             const added = GymRatStorage.toggleTemplateDiet(this.todayStr, tpl);
             this.renderDashboardScreen();
+            FirebaseSyncService.autoSyncIfActive();
             this.showToast(
                 added
                     ? `${tpl.title} 등록 완료 (+${tpl.caloriesKcal.toLocaleString()} kcal). 저녁 가이드를 확인하세요.`
@@ -301,6 +343,7 @@ class GymRatApp {
             const tpl = customRoutines.EXTRA_PROTEIN_BOOSTER;
             const added = GymRatStorage.toggleTemplateDiet(this.todayStr, tpl);
             this.renderDashboardScreen();
+            FirebaseSyncService.autoSyncIfActive();
             this.showToast(
                 added
                     ? `${tpl.title} 추가 완료 (+${tpl.proteinG}g 단백질)`
@@ -313,6 +356,7 @@ class GymRatApp {
             const checklist = GymRatStorage.getChecklist(this.todayStr);
             checklist.creatine5gTaken = e.target.checked;
             GymRatStorage.saveChecklist(this.todayStr, checklist);
+            FirebaseSyncService.autoSyncIfActive();
             if (e.target.checked) {
                 this.showToast("크레아틴 5g 복용 완료. 근세포 수분 보유 및 스트렝스 방어에 도움됩니다.");
             }
@@ -322,6 +366,7 @@ class GymRatApp {
             const checklist = GymRatStorage.getChecklist(this.todayStr);
             checklist.probioticsTaken = e.target.checked;
             GymRatStorage.saveChecklist(this.todayStr, checklist);
+            FirebaseSyncService.autoSyncIfActive();
         });
 
         document.getElementById("btn-water-250").addEventListener("click", () => this.addWater(250));
@@ -333,6 +378,7 @@ class GymRatApp {
             checklist.weightSession50mDone = e.target.checked;
             GymRatStorage.saveChecklist(this.todayStr, checklist);
             this.renderDashboardScreen();
+            FirebaseSyncService.autoSyncIfActive();
         });
 
         document.getElementById("check-stairmaster").addEventListener("change", e => {
@@ -340,6 +386,7 @@ class GymRatApp {
             checklist.stairMasterIntervalDone = e.target.checked;
             GymRatStorage.saveChecklist(this.todayStr, checklist);
             this.renderDashboardScreen();
+            FirebaseSyncService.autoSyncIfActive();
             if (e.target.checked) {
                 this.showToast("천국의 계단 10분 고강도 인터벌 유산소 완료.");
             }
@@ -404,11 +451,11 @@ class GymRatApp {
         const syncBtn = document.getElementById("btn-open-sync-modal");
         if (syncBtn) {
             if (syncInfo.nickname) {
-                syncBtn.textContent = `클라우드: ${syncInfo.nickname}`;
-                syncBtn.className = "btn-outline-lime active";
+                syncBtn.textContent = `계정: ${syncInfo.nickname}`;
+                syncBtn.className = "btn-cloud-account active";
             } else {
                 syncBtn.textContent = "클라우드 동기화";
-                syncBtn.className = "btn-outline-lime";
+                syncBtn.className = "btn-cloud-account";
             }
         }
 
@@ -649,6 +696,7 @@ class GymRatApp {
                 if (template) {
                     const selected = GymRatStorage.selectDinnerRecommendation(this.todayStr, template);
                     this.renderDashboardScreen();
+                    FirebaseSyncService.autoSyncIfActive();
                     this.showToast(
                         selected
                             ? `저녁 가이드 적용: ${template.title} (+${template.caloriesKcal}kcal / 단백질 +${template.proteinG}g)`
@@ -696,6 +744,7 @@ class GymRatApp {
                     const id = Number(btn.getAttribute("data-delete-workout"));
                     GymRatStorage.deleteWorkoutSet(id);
                     this.renderDashboardScreen();
+                    FirebaseSyncService.autoSyncIfActive();
                 });
             });
         }
@@ -834,6 +883,7 @@ class GymRatApp {
                     GymRatStorage.deleteWeightRecord(id);
                     this.selectedChartPointIndex = null;
                     this.renderAll();
+                    FirebaseSyncService.autoSyncIfActive();
                     this.showToast("선택한 날짜의 체성분 기록이 삭제되었습니다.");
                 });
             });
@@ -1327,6 +1377,7 @@ class GymRatApp {
 
         this.closeAllModals();
         this.renderDashboardScreen();
+        FirebaseSyncService.autoSyncIfActive();
         this.showToast(`${exerciseName} ${setNumber}세트 (${weightKg}kg × ${reps}회) 기록 완료.`);
     }
 
@@ -1335,6 +1386,7 @@ class GymRatApp {
         profile.dailyTargetCalories = Math.max(1500, Math.min(3500, Number(profile.dailyTargetCalories) + delta));
         GymRatStorage.saveProfile(profile);
         this.renderDashboardScreen();
+        FirebaseSyncService.autoSyncIfActive();
         this.showToast(`일일 목표 칼로리가 ${profile.dailyTargetCalories.toLocaleString()} kcal로 조정되었습니다.`);
     }
 
@@ -1343,6 +1395,111 @@ class GymRatApp {
         checklist.waterIntakeMl = Math.max(0, Math.min(6000, Number(checklist.waterIntakeMl) + deltaMl));
         GymRatStorage.saveChecklist(this.todayStr, checklist);
         this.renderDashboardScreen();
+        FirebaseSyncService.autoSyncIfActive();
+    }
+
+    /**
+     * 초기 랜딩 페이지 (본인 지정 아이디 + PIN 게이트) 초기화 및 인증 처리
+     */
+    initLandingGate() {
+        const landingGate = document.getElementById("screen-landing-gate");
+        const appMain = document.getElementById("app-main");
+        const bottomNav = document.getElementById("app-bottom-nav");
+        const idInput = document.getElementById("landing-input-id");
+        const pinInput = document.getElementById("landing-input-pin");
+        const recentBanner = document.getElementById("landing-recent-banner");
+        const recentText = document.getElementById("landing-recent-text");
+        const statusBox = document.getElementById("landing-status-box");
+
+        if (landingGate) landingGate.classList.remove("hidden");
+        if (appMain) appMain.classList.add("hidden");
+        if (bottomNav) bottomNav.classList.add("hidden");
+        if (statusBox) statusBox.classList.add("hidden");
+
+        const syncInfo = FirebaseSyncService.getActiveSyncInfo();
+        if (syncInfo.nickname) {
+            if (idInput) idInput.value = syncInfo.nickname;
+            if (pinInput) pinInput.value = "";
+            if (recentBanner && recentText) {
+                recentText.textContent = `최근 연결된 아이디 [${syncInfo.nickname}]가 감지되었습니다. PIN 번호(4자리 이상)를 입력하여 접속하세요.`;
+                recentBanner.classList.remove("hidden");
+            }
+        } else {
+            if (idInput) idInput.value = "";
+            if (pinInput) pinInput.value = "";
+            if (recentBanner) recentBanner.classList.add("hidden");
+        }
+    }
+
+    setLandingStatus(message, type = "info") {
+        const box = document.getElementById("landing-status-box");
+        if (!box) return;
+        if (!message) {
+            box.classList.add("hidden");
+            return;
+        }
+        box.textContent = message;
+        box.className = `landing-status-box ${type}`;
+    }
+
+    async handleLandingAuthSubmit() {
+        const idInput = document.getElementById("landing-input-id");
+        const pinInput = document.getElementById("landing-input-pin");
+        const submitBtn = document.getElementById("btn-landing-submit");
+
+        const userId = idInput ? idInput.value.trim() : "";
+        const pin = pinInput ? pinInput.value.trim() : "";
+
+        if (!userId || pin.length < 4) {
+            this.setLandingStatus("본인 지정 아이디와 4자리 이상의 PIN 번호를 정확히 입력해주세요.", "error");
+            return;
+        }
+
+        const originalBtnText = submitBtn ? submitBtn.textContent : "아이디 + PIN으로 시작하기";
+        if (submitBtn) {
+            submitBtn.disabled = true;
+            submitBtn.textContent = "Firebase Cloud Firestore 연결 중...";
+        }
+        this.setLandingStatus("Firebase Cloud Firestore에서 개인 클라우드 금고를 조회하고 있습니다...", "info");
+
+        try {
+            const res = await FirebaseSyncService.authenticateWithCloud(userId, pin);
+            this.setLandingStatus("", "info");
+            this.enterMainDashboard();
+
+            if (res.mode === "RESTORED") {
+                this.showToast(
+                    `[${res.nickname}] 클라우드 계정 연결 완료: 체성분 기록 ${res.recordsCount}건이 동기화되었습니다.`
+                );
+            } else {
+                this.showToast(
+                    `[${res.nickname}] 신규 클라우드 공간 생성 완료. [목표 설정]에서 내 스펙을 설정하세요.`
+                );
+            }
+        } catch (err) {
+            this.setLandingStatus(
+                `클라우드 연결 중 오류가 발생했습니다: ${err.message || "네트워크 상태를 확인하거나 아래 오프라인 모드를 이용해주세요."}`,
+                "error"
+            );
+        } finally {
+            if (submitBtn) {
+                submitBtn.disabled = false;
+                submitBtn.textContent = originalBtnText;
+            }
+        }
+    }
+
+    enterMainDashboard() {
+        const landingGate = document.getElementById("screen-landing-gate");
+        const appMain = document.getElementById("app-main");
+        const bottomNav = document.getElementById("app-bottom-nav");
+
+        if (landingGate) landingGate.classList.add("hidden");
+        if (appMain) appMain.classList.remove("hidden");
+        if (bottomNav) bottomNav.classList.remove("hidden");
+
+        this.renderAll();
+        window.scrollTo({ top: 0, behavior: "smooth" });
     }
 
     /**
@@ -1371,8 +1528,8 @@ class GymRatApp {
             pinInput.value = "";
             titleEl.textContent = "연결 상태: 로컬 기기 단독 사용 중";
             titleEl.className = "text-blue";
-            descEl.textContent = "동기화 닉네임과 PIN 번호(4자리 이상)를 입력하여 클라우드에 백업하거나 다른 기기의 기록을 불러오세요.";
-            unlinkBtn.style.display = "none";
+            descEl.textContent = "본인 지정 아이디와 PIN 번호(4자리 이상)를 입력하여 클라우드에 백업하거나 다른 기기의 기록을 불러오세요.";
+            unlinkBtn.style.display = "inline-block";
         }
 
         document.getElementById("modal-cloud-sync").classList.remove("hidden");
@@ -1383,7 +1540,7 @@ class GymRatApp {
         const pin = document.getElementById("input-sync-pin").value.trim();
 
         if (!nick || pin.length < 4) {
-            this.showToast("닉네임과 4자리 이상의 PIN 번호를 입력해주세요.");
+            this.showToast("본인 지정 아이디와 4자리 이상의 PIN 번호를 입력해주세요.");
             return;
         }
 
@@ -1410,7 +1567,7 @@ class GymRatApp {
         const pin = document.getElementById("input-sync-pin").value.trim();
 
         if (!nick || pin.length < 4) {
-            this.showToast("닉네임과 4자리 이상의 PIN 번호를 입력해주세요.");
+            this.showToast("본인 지정 아이디와 4자리 이상의 PIN 번호를 입력해주세요.");
             return;
         }
 
@@ -1434,9 +1591,9 @@ class GymRatApp {
 
     handleCloudUnlink() {
         FirebaseSyncService.clearActiveSyncInfo();
-        this.renderDashboardScreen();
-        this.openCloudSyncModal();
-        this.showToast("클라우드 자동 동기화 연결이 해제되었습니다. 로컬 기록은 안전하게 유지됩니다.");
+        this.closeAllModals();
+        this.initLandingGate();
+        this.showToast("아이디+PIN 접속 랜딩 화면으로 이동했습니다. 다른 아이디로 전환하거나 다시 로그인할 수 있습니다.");
     }
 
     closeAllModals() {

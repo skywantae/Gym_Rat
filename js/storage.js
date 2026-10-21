@@ -835,4 +835,56 @@ export class GymRatStorage {
             workoutRecords: mergedWorkouts
         };
     }
+
+    /**
+     * 특정 계정(syncKey)의 로컬 슬롯 백업을 저장하여 한 브라우저에서 여러 아이디 전환 시에도 데이터를 안전하게 격리합니다.
+     */
+    static saveSlotSnapshot(syncKey) {
+        if (!syncKey) return;
+        const snapshot = this.exportUserDataJson();
+        localStorage.setItem(`gymrat_slot_${syncKey}`, JSON.stringify(snapshot));
+    }
+
+    static getSlotSnapshot(syncKey) {
+        if (!syncKey) return null;
+        return safeParseObject(localStorage.getItem(`gymrat_slot_${syncKey}`));
+    }
+
+    /**
+     * 다른 사용자의 아이디+PIN으로 신규 계정을 생성하거나 전환할 때, 이전 사용자의 기록이 섞이지 않도록 활성 작업 공간을 초기화합니다.
+     */
+    static resetToCleanUserWorkspace() {
+        const defaultProfStr = JSON.stringify(DEFAULT_USER_PROFILE);
+        localStorage.setItem(STORAGE_KEYS.PROFILE, defaultProfStr);
+        localStorage.setItem(STORAGE_KEYS.PROFILE_BACKUP, defaultProfStr);
+
+        const defaultCustomRoutines = {
+            breakfastPresetCode: "BF_EGG3_APPLE1_SHAKE",
+            lunchMainPresetCode: "LC_CAFETERIA_SEOLLEONGTANG",
+            fixedDrinkPresetCode: "DR_GS25_BARISTA_174",
+            BREAKFAST_FIXED: { ...FixedRoutineTemplates.BREAKFAST_FIXED },
+            LUNCH_FIXED: { ...FixedRoutineTemplates.LUNCH_FIXED },
+            EXTRA_PROTEIN_BOOSTER: { ...FixedRoutineTemplates.EXTRA_PROTEIN_BOOSTER }
+        };
+        const routineStr = JSON.stringify(defaultCustomRoutines);
+        localStorage.setItem(STORAGE_KEYS.CUSTOM_ROUTINES, routineStr);
+        localStorage.setItem(STORAGE_KEYS.CUSTOM_ROUTINES_BACKUP, routineStr);
+
+        localStorage.setItem(STORAGE_KEYS.WEIGHT_RECORDS, JSON.stringify([]));
+        localStorage.setItem(STORAGE_KEYS.WEIGHT_RECORDS_BACKUP, JSON.stringify([]));
+        localStorage.setItem(STORAGE_KEYS.DIET_RECORDS, JSON.stringify([]));
+        localStorage.setItem(STORAGE_KEYS.WORKOUT_RECORDS, JSON.stringify([]));
+        localStorage.setItem(STORAGE_KEYS.DAILY_CHECKLISTS, JSON.stringify({}));
+    }
+
+    /**
+     * 특정 계정의 데이터 스냅샷을 활성 로컬 스토리지에 정확히 로드합니다.
+     */
+    static replaceUserDataJson(incomingData) {
+        this.resetToCleanUserWorkspace();
+        if (!incomingData || typeof incomingData !== "object") {
+            return this.exportUserDataJson();
+        }
+        return this.importUserDataJson(incomingData);
+    }
 }

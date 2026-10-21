@@ -59,8 +59,8 @@ export class GymRatCharts {
     static renderBodyCompositionChart(canvas, records, profile, selectedTab, selectedIndex, onSelectIndex) {
         if (!canvas) return;
         const rect = canvas.parentElement.getBoundingClientRect();
-        const width = Math.max(300, rect.width - 8);
-        const height = 270;
+        const width = Math.max(220, Math.floor(rect.width));
+        const height = width >= 600 ? 310 : width < 340 ? 235 : 270;
         const dpr = window.devicePixelRatio || 1;
 
         canvas.width = width * dpr;
@@ -80,8 +80,9 @@ export class GymRatCharts {
             return;
         }
 
-        const leftPad = 36;
-        const rightPad = 36;
+        const sidePad = width < 360 ? 24 : 36;
+        const leftPad = sidePad;
+        const rightPad = sidePad;
         const topPad = 28;
         const bottomPad = 36;
         const chartWidth = Math.max(1, width - leftPad - rightPad);
@@ -326,6 +327,11 @@ export class GymRatCharts {
         };
 
         canvas.onclick = e => handlePointer(e.clientX);
+        canvas.ontouchstart = e => {
+            if (e.touches && e.touches.length > 0) {
+                handlePointer(e.touches[0].clientX);
+            }
+        };
         canvas.ontouchmove = e => {
             if (e.touches && e.touches.length > 0) {
                 handlePointer(e.touches[0].clientX);

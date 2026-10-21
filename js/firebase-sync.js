@@ -59,28 +59,102 @@ export class FirebaseSyncService {
     }
 
     static clearActiveSyncInfo() {
+        const currentKey = localStorage.getItem(ACTIVE_SYNC_KEY);
+        if (currentKey) {
+            GymRatStorage.saveSlotSnapshot(currentKey);
+        }
         localStorage.removeItem(ACTIVE_SYNC_KEY);
         localStorage.removeItem(ACTIVE_SYNC_NICKNAME);
         localStorage.removeItem(LAST_SYNC_TIME_KEY);
     }
 
     /**
+     * 랜딩 페이지에서 본인 지정 아이디(닉네임) + PIN 입력 시 실행되는 통합 인증 및 클라우드 동기화
+     * - 이미 클라우드에 존재하는 아이디+PIN이면 데이터를 불러와 무손실 병합
+     * - 처음 사용하는 아이디+PIN이면 격리된 새 클라우드 금고(Vault)를 생성하여 즉시 연결
+     */
+    static async authenticateWithCloud(nickname, pin) {
+        const cleanNickDisplay = String(nickname || "").trim();
+        const syncKey = await this.generateSyncKey(cleanNickDisplay, pin);
+        const prevInfo = this.getActiveSyncInfo();
+        const prevSyncKey = prevInfo.syncKey;
+
+        // 다른 계정에서 전환하는 경우 이전 계정 슬롯을 백업하고 작업 공간을 격리 초기화
+        if (prevSyncKey && prevSyncKey !== syncKey) {
+            GymRatStorage.saveSlotSnapshot(prevSyncKey);
+            GymRatStorage.resetToCleanUserWorkspace();
+            const targetSlot = GymRatStorage.getSlotSnapshot(syncKey);
+            if (targetSlot) {
+                GymRatStorage.replaceUserDataJson(targetSlot);
+            }
+        }
+
+        const docRef = doc(db, COLLECTION_NAME, syncKey);
+        const docSnap = await getDoc(docRef);
+
+        if (docSnap.exists()) {
+            const cloudData = docSnap.data();
+            const mergedResult = GymRatStorage.importUserDataJson(cloudData);
+            const updatedPayload = {
+                ...mergedResult,
+                syncKey,
+                nickname: cleanNickDisplay,
+                updatedAt: Date.now()
+            };
+            await setDoc(docRef, updatedPayload, { merge: true });
+            GymRatStorage.saveSlotSnapshot(syncKey);
+            this.setActiveSyncInfo(syncKey, cleanNickDisplay);
+            return {
+                success: true,
+                mode: "RESTORED",
+                syncKey,
+                nickname: cleanNickDisplay,
+                recordsCount: updatedPayload.weightRecords.length,
+                updatedAt: updatedPayload.updatedAt
+            };
+        } else {
+            const localExport = GymRatStorage.exportUserDataJson();
+            const now = Date.now();
+            const payload = {
+                ...localExport,
+                syncKey,
+                nickname: cleanNickDisplay,
+                createdAt: now,
+                updatedAt: now
+            };
+            await setDoc(docRef, payload, { merge: true });
+            GymRatStorage.saveSlotSnapshot(syncKey);
+            this.setActiveSyncInfo(syncKey, cleanNickDisplay);
+            return {
+                success: true,
+                mode: "CREATED",
+                syncKey,
+                nickname: cleanNickDisplay,
+                recordsCount: payload.weightRecords.length,
+                updatedAt: payload.updatedAt
+            };
+        }
+    }
+
+    /**
      * 현재 로컬 기기의 전체 데이터(프로필, 체성분, 식단, 운동, 체크리스트)를 클라우드에 백업합니다.
      */
     static async backupToCloud(nickname, pin) {
-        const syncKey = await this.generateSyncKey(nickname, pin);
+        const cleanNickDisplay = String(nickname || "").trim();
+        const syncKey = await this.generateSyncKey(cleanNickDisplay, pin);
         const docRef = doc(db, COLLECTION_NAME, syncKey);
 
         const localExport = GymRatStorage.exportUserDataJson();
         const payload = {
             ...localExport,
             syncKey,
-            nickname: String(nickname).trim(),
+            nickname: cleanNickDisplay,
             updatedAt: Date.now()
         };
 
         await setDoc(docRef, payload, { merge: true });
-        this.setActiveSyncInfo(syncKey, nickname);
+        GymRatStorage.saveSlotSnapshot(syncKey);
+        this.setActiveSyncInfo(syncKey, cleanNickDisplay);
         return {
             success: true,
             syncKey,
@@ -93,12 +167,19 @@ export class FirebaseSyncService {
      * 클라우드에서 스냅샷을 조회하여 로컬 데이터와 무손실 병합합니다.
      */
     static async restoreFromCloud(nickname, pin) {
-        const syncKey = await this.generateSyncKey(nickname, pin);
+        const cleanNickDisplay = String(nickname || "").trim();
+        const syncKey = await this.generateSyncKey(cleanNickDisplay, pin);
+        const prevInfo = this.getActiveSyncInfo();
+        if (prevInfo.syncKey && prevInfo.syncKey !== syncKey) {
+            GymRatStorage.saveSlotSnapshot(prevInfo.syncKey);
+            GymRatStorage.resetToCleanUserWorkspace();
+        }
+
         const docRef = doc(db, COLLECTION_NAME, syncKey);
         const docSnap = await getDoc(docRef);
 
         if (!docSnap.exists()) {
-            throw new Error("해당 닉네임과 PIN으로 저장된 클라우드 백업이 없습니다. [클라우드에 백업]을 먼저 실행해주세요.");
+            throw new Error("해당 아이디와 PIN으로 저장된 클라우드 백업이 없습니다. [클라우드에 백업] 또는 랜딩 화면에서 신규 생성을 진행해주세요.");
         }
 
         const cloudData = docSnap.data();
@@ -110,12 +191,13 @@ export class FirebaseSyncService {
         const updatedPayload = {
             ...mergedResult,
             syncKey,
-            nickname: String(nickname).trim(),
+            nickname: cleanNickDisplay,
             updatedAt: Date.now()
         };
         await setDoc(docRef, updatedPayload, { merge: true });
 
-        this.setActiveSyncInfo(syncKey, nickname);
+        GymRatStorage.saveSlotSnapshot(syncKey);
+        this.setActiveSyncInfo(syncKey, cleanNickDisplay);
         return {
             success: true,
             syncKey,
@@ -131,6 +213,7 @@ export class FirebaseSyncService {
         const { syncKey, nickname } = this.getActiveSyncInfo();
         if (!syncKey || !nickname) return;
         try {
+            GymRatStorage.saveSlotSnapshot(syncKey);
             const docRef = doc(db, COLLECTION_NAME, syncKey);
             const localExport = GymRatStorage.exportUserDataJson();
             const payload = {
