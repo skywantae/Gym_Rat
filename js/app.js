@@ -124,7 +124,7 @@ class GymRatApp {
             });
         }
 
-        // 운동 자극 문구 갱신 버튼 및 본문 클릭 이벤트
+        // 운동 자극 문구 갱신 버튼 및 카드 전체 클릭 이벤트
         const btnRefreshQuote = document.getElementById("btn-refresh-quote");
         if (btnRefreshQuote) {
             btnRefreshQuote.addEventListener("click", e => {
@@ -132,9 +132,9 @@ class GymRatApp {
                 MotivationalQuotesService.renderMotivationalQuote();
             });
         }
-        const quoteBody = document.getElementById("dashboard-quote-body");
-        if (quoteBody) {
-            quoteBody.addEventListener("click", () => {
+        const quoteCard = document.getElementById("dashboard-quote-card");
+        if (quoteCard) {
+            quoteCard.addEventListener("click", () => {
                 MotivationalQuotesService.renderMotivationalQuote();
             });
         }

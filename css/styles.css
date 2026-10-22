@@ -236,128 +236,56 @@ body {
     margin-top: 2px;
 }
 
-/* --- Motivational Quote Banner Card --- */
-.quote-banner-card {
-    background: linear-gradient(135deg, rgba(22, 27, 34, 0.98) 0%, rgba(33, 38, 45, 0.94) 100%);
-    border: 1px solid rgba(57, 211, 83, 0.22);
-    border-radius: 18px;
-    padding: 14px 18px;
-    margin-bottom: 16px;
-    position: relative;
-    overflow: hidden;
-    box-shadow: 0 4px 16px rgba(0, 0, 0, 0.28);
-    transition: border-color 0.2s ease, box-shadow 0.2s ease;
-}
-
-.quote-banner-card::before {
-    content: "";
-    position: absolute;
-    left: 0;
-    top: 0;
-    bottom: 0;
-    width: 4px;
-    background: linear-gradient(180deg, var(--neon-lime) 0%, var(--electric-blue) 100%);
-}
-
-.quote-banner-card:hover {
-    border-color: rgba(57, 211, 83, 0.42);
-    box-shadow: 0 6px 20px rgba(0, 0, 0, 0.38);
-}
-
-.quote-card-header {
+/* --- Single-Line Motivational Quote Banner --- */
+.quote-single-line-card {
     display: flex;
+    align-items: center;
     justify-content: space-between;
-    align-items: center;
-    margin-bottom: 8px;
+    gap: 12px;
+    background: linear-gradient(90deg, rgba(22, 27, 34, 0.95) 0%, rgba(33, 38, 45, 0.9) 100%);
+    border: 1px solid rgba(57, 211, 83, 0.22);
+    border-left: 3.5px solid var(--neon-lime);
+    border-radius: 12px;
+    padding: 10px 14px;
+    margin-bottom: 14px;
+    cursor: pointer;
+    box-shadow: 0 2px 10px rgba(0, 0, 0, 0.22);
+    transition: border-color 0.2s ease, box-shadow 0.2s ease, background-color 0.2s ease;
 }
 
-.quote-tag-wrap {
-    display: flex;
-    align-items: center;
-    gap: 8px;
+.quote-single-line-card:hover {
+    border-color: rgba(57, 211, 83, 0.45);
+    box-shadow: 0 4px 14px rgba(0, 0, 0, 0.32);
 }
 
-.quote-badge {
-    display: inline-block;
-    font-size: 10.5px;
-    font-weight: 800;
-    letter-spacing: 0.08em;
-    padding: 2px 7px;
-    border-radius: 4px;
-    background-color: rgba(57, 211, 83, 0.14);
-    color: var(--neon-lime);
-    border: 1px solid rgba(57, 211, 83, 0.28);
-    text-transform: uppercase;
-}
-
-.quote-category-tag {
-    font-size: 11px;
-    font-weight: 700;
-    padding: 2px 7px;
-    border-radius: 4px;
-    transition: all 0.2s ease;
-}
-
-.quote-category-tag.badge-amber {
-    color: #F0883E;
-    background-color: rgba(240, 136, 62, 0.12);
-    border: 1px solid rgba(240, 136, 62, 0.25);
-}
-
-.quote-category-tag.badge-blue {
-    color: var(--electric-blue);
-    background-color: rgba(88, 166, 255, 0.12);
-    border: 1px solid rgba(88, 166, 255, 0.25);
-}
-
-.quote-category-tag.badge-lime {
-    color: var(--neon-lime);
-    background-color: rgba(57, 211, 83, 0.12);
-    border: 1px solid rgba(57, 211, 83, 0.25);
-}
-
-.btn-refresh-quote {
-    background: rgba(255, 255, 255, 0.06);
-    border: 1px solid var(--border-subtle);
-    color: var(--text-secondary);
-    border-radius: 6px;
-    padding: 3px 9px;
-    font-size: 11.5px;
+.quote-single-text {
+    font-size: 13.5px;
     font-weight: 600;
-    cursor: pointer;
-    transition: all 0.2s ease;
-}
-
-.btn-refresh-quote:hover {
     color: var(--text-primary);
-    background: rgba(255, 255, 255, 0.12);
-    border-color: var(--neon-lime);
-}
-
-.quote-content-body {
-    cursor: pointer;
-    padding-top: 2px;
-}
-
-.quote-main-text {
-    font-size: 15px;
-    font-weight: 700;
-    color: #ffffff;
-    line-height: 1.5;
-    margin: 0 0 4px 0;
-    letter-spacing: -0.02em;
-    word-break: keep-all;
-    transition: opacity 0.15s ease;
-}
-
-.quote-sub-text {
-    font-size: 12.5px;
-    color: var(--text-secondary);
-    font-weight: 500;
-    line-height: 1.4;
+    line-height: 1.45;
     margin: 0;
     word-break: keep-all;
     transition: opacity 0.15s ease;
+}
+
+.btn-refresh-quote-mini {
+    background: rgba(255, 255, 255, 0.05);
+    border: 1px solid var(--border-subtle);
+    color: var(--text-secondary);
+    border-radius: 6px;
+    padding: 3px 8px;
+    font-size: 11px;
+    font-weight: 600;
+    white-space: nowrap;
+    flex-shrink: 0;
+    cursor: pointer;
+    transition: all 0.2s ease;
+}
+
+.btn-refresh-quote-mini:hover {
+    color: var(--text-primary);
+    background: rgba(255, 255, 255, 0.12);
+    border-color: var(--neon-lime);
 }
 
 /* --- 1. Atflee Dual-Box Weight & Weekly Target Overview --- */
@@ -2439,21 +2367,17 @@ body {
         align-items: stretch;
     }
 
-    .quote-banner-card {
+    .quote-single-line-card {
         grid-column: 1 / -1;
-        padding: 16px 22px;
+        padding: 12px 18px;
         margin-bottom: 0;
     }
 
-    .quote-main-text {
-        font-size: 16.5px;
+    .quote-single-text {
+        font-size: 14.5px;
     }
 
-    .quote-sub-text {
-        font-size: 13px;
-    }
-
-    #screen-dashboard > .card:not(.quote-banner-card) {
+    #screen-dashboard > .card {
         margin-bottom: 0;
         display: flex;
         flex-direction: column;
