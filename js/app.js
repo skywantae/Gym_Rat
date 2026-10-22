@@ -16,6 +16,7 @@ import {
 } from "./storage.js";
 import { GymRatCharts } from "./chart.js";
 import { FirebaseSyncService } from "./firebase-sync.js";
+import { MotivationalQuotesService } from "./quotes.js";
 
 class GymRatApp {
     constructor() {
@@ -120,6 +121,21 @@ class GymRatApp {
         if (btnOpenWorkout) {
             btnOpenWorkout.addEventListener("click", () => {
                 this.openWorkoutModal();
+            });
+        }
+
+        // 운동 자극 문구 갱신 버튼 및 본문 클릭 이벤트
+        const btnRefreshQuote = document.getElementById("btn-refresh-quote");
+        if (btnRefreshQuote) {
+            btnRefreshQuote.addEventListener("click", e => {
+                e.stopPropagation();
+                MotivationalQuotesService.renderMotivationalQuote();
+            });
+        }
+        const quoteBody = document.getElementById("dashboard-quote-body");
+        if (quoteBody) {
+            quoteBody.addEventListener("click", () => {
+                MotivationalQuotesService.renderMotivationalQuote();
             });
         }
 
@@ -399,7 +415,7 @@ class GymRatApp {
         document.getElementById("atflee-weekly-sub2").textContent =
             `터치하여 ${plan.currentWeekNumber}주차 이전 기록 및 이후 몸무게 보기`;
 
-        // 2. 지난 번 대비 3열
+        // 2. 어제 대비 3열
         const formatSigned = val => (val > 0 ? `+${val.toFixed(2)}` : val.toFixed(2));
         document.getElementById("delta-weight").textContent = formatSigned(plan.weightDeltaFromPrevKg);
         document.getElementById("delta-muscle").textContent = formatSigned(plan.muscleDeltaFromPrevKg);
@@ -1230,6 +1246,7 @@ class GymRatApp {
         if (bottomNav) bottomNav.classList.remove("hidden");
 
         this.renderAll();
+        MotivationalQuotesService.renderMotivationalQuote();
         window.scrollTo({ top: 0, behavior: "smooth" });
     }
 

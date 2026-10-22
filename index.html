@@ -455,6 +455,27 @@
              화면 1: 메인 루틴 대시보드 (몸무게 & 주간 목표 + 식단 + 운동)
              ================================================================= -->
         <section id="screen-dashboard">
+            <!-- 오늘의 운동 자극 한마디 (동적 멘탈 부스터) -->
+            <article id="dashboard-quote-card" class="card quote-banner-card">
+                <div class="quote-card-header">
+                    <div class="quote-tag-wrap">
+                        <span class="quote-badge">MOTIVATION</span>
+                        <span id="quote-category-tag" class="quote-category-tag badge-lime">강력 자극</span>
+                    </div>
+                    <button type="button" id="btn-refresh-quote" class="btn-refresh-quote" title="새로운 자극 문구 보기">
+                        다른 문구
+                    </button>
+                </div>
+                <div id="dashboard-quote-body" class="quote-content-body" title="클릭하여 다른 자극 문구 보기">
+                    <p id="motivational-quote-text" class="quote-main-text">
+                        "오늘 든 마지막 한 개가 내일의 당신을 결정한다."
+                    </p>
+                    <p id="motivational-quote-sub" class="quote-sub-text">
+                        한계를 마주한 바로 그 지점이 성장이 시작되는 출발선입니다.
+                    </p>
+                </div>
+            </article>
+
             <!-- 1. 앳플리(Atflee) 스타일 몸무게 정보 & 스포츠 영양학 주간 안전 감량 목표 카드 -->
             <article class="card">
                 <div class="card-header-row">
@@ -487,8 +508,8 @@
                     </div>
                 </div>
 
-                <!-- 지난 번 대비 -->
-                <h3 class="delta-section-title">지난 번 대비</h3>
+                <!-- 어제 대비 -->
+                <h3 class="delta-section-title">어제 대비</h3>
                 <div class="delta-three-cols">
                     <div class="delta-col">
                         <span class="delta-label">몸무게</span>
