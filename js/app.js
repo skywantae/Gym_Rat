@@ -124,17 +124,10 @@ class GymRatApp {
             });
         }
 
-        // 운동 자극 문구 갱신 버튼 및 카드 전체 클릭 이벤트
-        const btnRefreshQuote = document.getElementById("btn-refresh-quote");
-        if (btnRefreshQuote) {
-            btnRefreshQuote.addEventListener("click", e => {
-                e.stopPropagation();
-                MotivationalQuotesService.renderMotivationalQuote();
-            });
-        }
-        const quoteCard = document.getElementById("dashboard-quote-card");
-        if (quoteCard) {
-            quoteCard.addEventListener("click", () => {
+        // 최상단 중앙 운동 자극 문구 클릭 시 새로운 명언 갱신
+        const quoteBar = document.getElementById("dashboard-quote-bar");
+        if (quoteBar) {
+            quoteBar.addEventListener("click", () => {
                 MotivationalQuotesService.renderMotivationalQuote();
             });
         }
@@ -348,17 +341,20 @@ class GymRatApp {
         this.activeBottomNav = viewName;
         const dashSection = document.getElementById("screen-dashboard");
         const graphSection = document.getElementById("screen-graph");
+        const quoteBar = document.getElementById("dashboard-quote-bar");
         const navDash = document.getElementById("nav-btn-dashboard");
         const navGraph = document.getElementById("nav-btn-graph");
 
         if (viewName === "dashboard") {
             dashSection.classList.remove("hidden");
+            if (quoteBar) quoteBar.classList.remove("hidden");
             graphSection.classList.add("hidden");
             navDash.classList.add("active");
             navGraph.classList.remove("active");
             this.renderDashboardScreen();
         } else {
             dashSection.classList.add("hidden");
+            if (quoteBar) quoteBar.classList.add("hidden");
             graphSection.classList.remove("hidden");
             navDash.classList.remove("active");
             navGraph.classList.add("active");

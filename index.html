@@ -9,7 +9,7 @@
     <title>GymRat - 과학적 체성분 감량 및 식단 운동 대시보드</title>
     <link rel="manifest" href="manifest.json" />
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/static/pretendard.min.css" />
-    <link rel="stylesheet" href="css/styles.css" />
+    <link rel="stylesheet" href="css/styles.css?v=20261022_2" />
 </head>
 <body>
     <!-- =================================================================
@@ -451,18 +451,17 @@
             </div>
         </header>
 
+        <!-- 최상단 중앙 운동 자극 명언 (단 한 줄 중앙 정렬) -->
+        <div id="dashboard-quote-bar" class="quote-top-center-bar" title="클릭하여 다른 명언 보기">
+            <p id="motivational-quote-text" class="quote-top-center-text">
+                "마지막 3~4회의 반복이 근육을 성장시킨다. 고통을 뚫고 나아가는 자가 챔피언이 된다." - 아놀드 슈왈제네거
+            </p>
+        </div>
+
         <!-- =================================================================
-             화면 1: 메인 루틴 대시보드 (몸무게 & 주간 목표 + 식단 + 운동)
+             화면 1: 메인 루틴 대시보드 (좌: 몸무게 정보 & 주간 목표 / 우: 내 맞춤 평소 식습관)
              ================================================================= -->
         <section id="screen-dashboard">
-            <!-- 오늘의 운동 자극 한마디 (단 한 줄 명언) -->
-            <div id="dashboard-quote-card" class="quote-single-line-card" title="클릭하여 다른 문구 보기">
-                <p id="motivational-quote-text" class="quote-single-text">
-                    "마지막 3~4회의 반복이 근육을 성장시킨다. 고통을 뚫고 나아가는 자가 챔피언이 된다." - 아놀드 슈왈제네거
-                </p>
-                <button type="button" id="btn-refresh-quote" class="btn-refresh-quote-mini" title="다른 문구 보기">다른 문구</button>
-            </div>
-
             <!-- 1. 앳플리(Atflee) 스타일 몸무게 정보 & 스포츠 영양학 주간 안전 감량 목표 카드 -->
             <article class="card">
                 <div class="card-header-row">
