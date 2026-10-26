@@ -5,7 +5,7 @@
  * - '이번 주 목표까지' 클릭 시 현재 주차, 이전 측정 기록, 이후 주차별 예상 몸무게 모달 표시
  */
 
-import { SafeWeightLossCalculator, getLocalDateString } from "./calculator.js";
+import { SafeWeightLossCalculator, getLocalDateString, parseLocalDate } from "./calculator.js";
 import {
     GymRatStorage,
     FixedRoutineTemplates,
@@ -182,16 +182,24 @@ class GymRatApp {
 
         dateInput.addEventListener("change", () => {
             const selectedDate = dateInput.value;
+            this.syncBodyRecordModalForDate(selectedDate);
+            const profile = GymRatStorage.getProfile();
             const records = GymRatStorage.getWeightRecords();
-            const found = records.find(r => r.recordDate === selectedDate);
-            if (found) {
-                weightInput.value = Number(found.weightKg).toFixed(2);
-                muscleInput.value = Number(found.skeletalMuscleMassKg).toFixed(2);
-                fatPctInput.value = Number(found.bodyFatPercentage).toFixed(1);
-                updateFatMassDisplay();
-                memoInput.value = found.memo || "";
-            }
+            const plan = SafeWeightLossCalculator.calculate(profile, records);
+            this.renderMissedDateChips(plan.missedDates, selectedDate);
         });
+
+        // 그래프 화면 내 놓친 날짜 기록 추가 버튼
+        const btnGraphMissed = document.getElementById("btn-graph-add-missed");
+        if (btnGraphMissed) {
+            btnGraphMissed.addEventListener("click", () => {
+                const profile = GymRatStorage.getProfile();
+                const records = GymRatStorage.getWeightRecords();
+                const plan = SafeWeightLossCalculator.calculate(profile, records);
+                const firstMissed = (plan.missedDates && plan.missedDates.length > 0) ? plan.missedDates[0].dateStr : null;
+                this.openBodyRecordModal(firstMissed);
+            });
+        }
 
         // 체중 및 체지방률(%) 입력 시 체지방량(kg) 실시간 자동 계산
         weightInput.addEventListener("input", updateFatMassDisplay);
@@ -795,13 +803,65 @@ class GymRatApp {
             panelFuture.classList.remove("hidden");
         }
 
-        // 1) 이전 측정 기록 렌더링 (주차별 목표 달성 시 '성공', 미달성 시 '실패' 배지 및 문구 표시)
+        // 1) 이전 측정 기록 및 놓친 날짜 통합 타임라인 렌더링 (최신순)
         const pastRowsEl = document.getElementById("roadmap-past-rows");
-        if (plan.pastRecordsWithMeta.length === 0) {
-            pastRowsEl.innerHTML = `<p class="empty-hint" style="padding: 18px 8px; text-align: center;">저장된 측정 기록이 없습니다. 상단 [오늘 체성분 입력] 버튼을 눌러 1주차 시작일을 기록하세요.</p>`;
+        const recordedByDate = new Map();
+        plan.pastRecordsWithMeta.forEach(r => recordedByDate.set(r.recordDate, r));
+
+        const timelineItems = [];
+        if (records.length > 0) {
+            const startDate = parseLocalDate(plan.startDateStr);
+            const activeEndStr = this.todayStr > plan.latestDate ? this.todayStr : plan.latestDate;
+            const endDate = parseLocalDate(activeEndStr);
+            const curr = new Date(endDate);
+
+            while (curr >= startDate) {
+                const dStr = getLocalDateString(curr);
+                const weekNum = SafeWeightLossCalculator.calculateWeekNumber(plan.startDateStr, dStr);
+                if (recordedByDate.has(dStr)) {
+                    timelineItems.push({
+                        isMissed: false,
+                        ...recordedByDate.get(dStr)
+                    });
+                } else {
+                    timelineItems.push({
+                        isMissed: true,
+                        recordDate: dStr,
+                        weekNumber: weekNum,
+                        isStartRecord: dStr === plan.startDateStr
+                    });
+                }
+                curr.setDate(curr.getDate() - 1);
+            }
+        }
+
+        if (timelineItems.length === 0) {
+            pastRowsEl.innerHTML = `<p class="empty-hint" style="padding: 18px 8px; text-align: center;">저장된 측정 기록이 없습니다. 상단 [체성분 입력] 버튼을 눌러 1주차 시작일을 기록하세요.</p>`;
         } else {
-            pastRowsEl.innerHTML = plan.pastRecordsWithMeta
-                .map((rec, idx) => {
+            pastRowsEl.innerHTML = timelineItems
+                .map((item, idx) => {
+                    if (item.isMissed) {
+                        return `
+                <div class="roadmap-row missed-record-row">
+                    <div>
+                        <div class="roadmap-week-title-row">
+                            <strong>${item.weekNumber}주차</strong>
+                            <span class="catchup-badge" style="background: rgba(255, 166, 87, 0.2); color: var(--warning-orange); border-color: rgba(255, 166, 87, 0.4);">기록 누락</span>
+                        </div>
+                        <span class="roadmap-sub">${item.recordDate}</span>
+                    </div>
+                    <div>
+                        <strong style="color: var(--text-secondary); font-size: 13px;">미입력</strong>
+                        <span class="roadmap-sub">체중 데이터 없음</span>
+                    </div>
+                    <div>
+                        <button type="button" class="btn-enter-missed js-enter-missed-date" data-missed-date="${item.recordDate}">기입하기</button>
+                    </div>
+                </div>
+            `;
+                    }
+
+                    const rec = item;
                     const deltaSign = rec.deltaWeightKg > 0 ? `+${rec.deltaWeightKg.toFixed(2)}` : rec.deltaWeightKg.toFixed(2);
                     const isLatest = idx === 0;
                     const weekTitle = rec.isStartRecord
@@ -859,6 +919,14 @@ class GymRatApp {
             `;
                 })
                 .join("");
+
+            pastRowsEl.querySelectorAll(".js-enter-missed-date").forEach(btn => {
+                btn.addEventListener("click", () => {
+                    const targetDate = btn.getAttribute("data-missed-date");
+                    this.closeAllModals();
+                    this.openBodyRecordModal(targetDate);
+                });
+            });
         }
 
         // 2) 이후 주차별 예상 몸무게 시뮬레이션 렌더링
@@ -885,26 +953,138 @@ class GymRatApp {
             .join("");
     }
 
-    openBodyRecordModal() {
+    openBodyRecordModal(targetDateStr = null) {
         const profile = GymRatStorage.getProfile();
         const records = GymRatStorage.getWeightRecords();
         const plan = SafeWeightLossCalculator.calculate(profile, records);
-
         this.todayStr = getLocalDateString();
-        document.getElementById("input-body-date").value = this.todayStr;
-        document.getElementById("input-body-weight").value = plan.currentWeightKg.toFixed(2);
-        document.getElementById("input-body-muscle").value = plan.currentMuscleKg.toFixed(2);
-        document.getElementById("input-body-fat-pct").value = plan.currentFatPercent.toFixed(1);
 
-        const fatMassInput = document.getElementById("input-body-fat-mass");
-        const calcBadge = document.getElementById("display-calc-fat-mass");
-        if (fatMassInput) fatMassInput.value = plan.currentFatMassKg.toFixed(2);
-        if (calcBadge) calcBadge.textContent = `${plan.currentFatMassKg.toFixed(2)} kg`;
+        const dateToSet = targetDateStr || this.todayStr;
+        const dateInput = document.getElementById("input-body-date");
+        if (dateInput) dateInput.value = dateToSet;
 
-        const todayExisting = records.find(r => r.recordDate === this.todayStr);
-        document.getElementById("input-body-memo").value = todayExisting ? (todayExisting.memo || "") : "";
+        this.renderMissedDateChips(plan.missedDates, dateToSet);
+        this.syncBodyRecordModalForDate(dateToSet, plan, records);
 
         document.getElementById("modal-body-record").classList.remove("hidden");
+    }
+
+    renderMissedDateChips(missedDates = [], selectedDate = "") {
+        const container = document.getElementById("missed-dates-quick-container");
+        const chipsEl = document.getElementById("missed-dates-chips");
+        if (!container || !chipsEl) return;
+
+        if (!missedDates || missedDates.length === 0) {
+            container.classList.add("hidden");
+            chipsEl.innerHTML = "";
+            return;
+        }
+
+        container.classList.remove("hidden");
+        chipsEl.innerHTML = missedDates
+            .map(item => {
+                const isActive = item.dateStr === selectedDate;
+                const isToday = item.dateStr === this.todayStr;
+                const displayLabel = isToday ? `${item.dateStr.slice(5).replace("-", "/")} (오늘)` : item.label;
+                return `
+                    <button type="button" class="missed-date-chip ${isActive ? "active" : ""}" data-chip-date="${item.dateStr}">
+                        ${displayLabel}
+                    </button>
+                `;
+            })
+            .join("");
+
+        chipsEl.querySelectorAll("[data-chip-date]").forEach(btn => {
+            btn.addEventListener("click", () => {
+                const d = btn.getAttribute("data-chip-date");
+                const dateInput = document.getElementById("input-body-date");
+                if (dateInput) dateInput.value = d;
+                this.syncBodyRecordModalForDate(d);
+                chipsEl.querySelectorAll("[data-chip-date]").forEach(c => {
+                    c.classList.toggle("active", c.getAttribute("data-chip-date") === d);
+                });
+            });
+        });
+    }
+
+    syncBodyRecordModalForDate(dateStr, cachedPlan = null, cachedRecords = null) {
+        const records = cachedRecords || GymRatStorage.getWeightRecords();
+        const profile = GymRatStorage.getProfile();
+        const plan = cachedPlan || SafeWeightLossCalculator.calculate(profile, records);
+        this.todayStr = getLocalDateString();
+
+        const titleEl = document.getElementById("modal-body-title");
+        const subtitleEl = document.getElementById("modal-body-subtitle");
+        const modeBadge = document.getElementById("badge-body-record-mode");
+        const weightInput = document.getElementById("input-body-weight");
+        const muscleInput = document.getElementById("input-body-muscle");
+        const fatPctInput = document.getElementById("input-body-fat-pct");
+        const fatMassInput = document.getElementById("input-body-fat-mass");
+        const calcBadge = document.getElementById("display-calc-fat-mass");
+        const memoInput = document.getElementById("input-body-memo");
+
+        const found = records.find(r => r.recordDate === dateStr);
+        const isToday = dateStr === this.todayStr;
+        const isPast = dateStr < this.todayStr;
+
+        if (titleEl) {
+            if (isToday) {
+                titleEl.textContent = "오늘 체성분 기록 입력";
+            } else if (isPast) {
+                titleEl.textContent = `${dateStr} 체성분 기록 (놓친 날짜 입력)`;
+            } else {
+                titleEl.textContent = `${dateStr} 체성분 기록 입력`;
+            }
+        }
+
+        if (found) {
+            if (modeBadge) {
+                modeBadge.textContent = "기존 기록 수정";
+                modeBadge.className = "body-record-mode-badge edit";
+            }
+            if (subtitleEl) {
+                subtitleEl.textContent = `${dateStr}에 저장된 측정 기록이 있습니다. 수치 수정 후 저장하면 즉시 갱신됩니다.`;
+            }
+            if (weightInput) weightInput.value = Number(found.weightKg).toFixed(2);
+            if (muscleInput) muscleInput.value = Number(found.skeletalMuscleMassKg).toFixed(2);
+            if (fatPctInput) fatPctInput.value = Number(found.bodyFatPercentage).toFixed(1);
+            if (memoInput) memoInput.value = found.memo || "";
+        } else {
+            if (modeBadge) {
+                modeBadge.textContent = isPast ? "놓친 날짜 신규 입력" : "신규 기록 입력";
+                modeBadge.className = "body-record-mode-badge new";
+            }
+            if (subtitleEl) {
+                subtitleEl.textContent = isPast
+                    ? `${dateStr}에 누락된 체성분을 입력합니다. 이전 측정 수치를 기본값으로 불러왔으니 조정 후 저장하세요.`
+                    : "몸무게, 골격근량, 체지방률만 입력하시면 체지방량(kg)은 자동으로 정밀 계산됩니다.";
+            }
+
+            const priorRecords = records.filter(r => r.recordDate < dateStr);
+            const refRecord = priorRecords.length > 0 ? priorRecords[priorRecords.length - 1] : null;
+
+            if (refRecord) {
+                if (weightInput) weightInput.value = Number(refRecord.weightKg).toFixed(2);
+                if (muscleInput) muscleInput.value = Number(refRecord.skeletalMuscleMassKg).toFixed(2);
+                if (fatPctInput) fatPctInput.value = Number(refRecord.bodyFatPercentage).toFixed(1);
+            } else {
+                if (weightInput) weightInput.value = plan.currentWeightKg.toFixed(2);
+                if (muscleInput) muscleInput.value = plan.currentMuscleKg.toFixed(2);
+                if (fatPctInput) fatPctInput.value = plan.currentFatPercent.toFixed(1);
+            }
+            if (memoInput) memoInput.value = "";
+        }
+
+        const curW = parseFloat(weightInput ? weightInput.value : 0);
+        const curPct = parseFloat(fatPctInput ? fatPctInput.value : 0);
+        if (curW > 0 && !isNaN(curPct)) {
+            const fm = SafeWeightLossCalculator.round2(curW * (curPct / 100));
+            if (calcBadge) calcBadge.textContent = `${fm.toFixed(2)} kg`;
+            if (fatMassInput) fatMassInput.value = fm.toFixed(2);
+        } else {
+            if (calcBadge) calcBadge.textContent = "0.00 kg";
+            if (fatMassInput) fatMassInput.value = "";
+        }
     }
 
     async handleSaveBodyRecord() {
@@ -940,8 +1120,16 @@ class GymRatApp {
         this.closeAllModals();
         this.renderAll();
         await FirebaseSyncService.autoSyncIfActive();
+
+        const profile = GymRatStorage.getProfile();
+        const plan = SafeWeightLossCalculator.calculate(profile, updatedList);
+        const remainingMissed = plan.missedDates ? plan.missedDates.filter(d => d.dateStr < this.todayStr) : [];
+        const missedHint = remainingMissed.length > 0
+            ? ` (남은 미입력 과거 날짜: ${remainingMissed.length}건)`
+            : "";
+
         this.showToast(
-            `${recordDate} 체성분 기록 반영 완료: ${weightKg.toFixed(2)}kg · 체지방량 ${bodyFatMassKg.toFixed(2)}kg 자동 계산 (총 ${updatedList.length}건 기록 보존)`
+            `${recordDate} 체성분 기록 반영 완료: ${weightKg.toFixed(2)}kg · 체지방량 ${bodyFatMassKg.toFixed(2)}kg 자동 계산${missedHint}`
         );
     }
 

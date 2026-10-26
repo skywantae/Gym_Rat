@@ -209,6 +209,32 @@ export class SafeWeightLossCalculator {
     }
 
     /**
+     * 시작일부터 종료일까지의 구간에서 기록이 누락된 날짜 리스트를 반환합니다.
+     */
+    static getMissedDatesInRange(startDateStr, endDateStr, existingRecords = []) {
+        if (!startDateStr || !endDateStr || startDateStr > endDateStr) return [];
+        const recordedSet = new Set(existingRecords.map(r => r.recordDate));
+        const start = parseLocalDate(startDateStr);
+        const end = parseLocalDate(endDateStr);
+        const missed = [];
+        const curr = new Date(start);
+        const dayNames = ["일", "월", "화", "수", "목", "금", "토"];
+
+        while (curr <= end) {
+            const dStr = getLocalDateString(curr);
+            if (!recordedSet.has(dStr)) {
+                missed.push({
+                    dateStr: dStr,
+                    dayOfWeek: dayNames[curr.getDay()],
+                    label: `${dStr.slice(5).replace("-", "/")} (${dayNames[curr.getDay()]})`
+                });
+            }
+            curr.setDate(curr.getDate() + 1);
+        }
+        return missed;
+    }
+
+    /**
      * 체지방률과 골격근 여유분을 바탕으로 주간 안전 감량폭(kg)을 계산합니다.
      */
     static computeWeeklySafeLossKg(weightKg, fatPercent, fatMassKg, muscleKg, minTargetMuscleKg, recentMuscleDeltaKg = 0) {
@@ -1096,6 +1122,8 @@ export class SafeWeightLossCalculator {
             `매주 ${weeklyTargetLossKg.toFixed(2)}kg씩 감량하는 것이 골격근 ${minTargetMuscleKg.toFixed(1)}kg 이상 방어에 가장 이상적입니다. ` +
             `(일평균 소모 ${tdeeAnalysis.estimatedDailyTdeeKcal.toLocaleString()}kcal 기준, 일일 권장 적자 약 -${recommendedDailyDeficitKcal}kcal · 약 ${estimatedWeeksToFinalGoal}주 코스)`;
 
+        const missedDates = this.getMissedDatesInRange(startDateStr, todayStr, sorted);
+
         return {
             startDateStr,
             currentWeekNumber,
@@ -1142,7 +1170,8 @@ export class SafeWeightLossCalculator {
             scienceCoachingTitle,
             scienceCoachingDetail,
             pastRecordsWithMeta,
-            futureWeeklyRoadmap
+            futureWeeklyRoadmap,
+            missedDates
         };
     }
 }
