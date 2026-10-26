@@ -939,6 +939,9 @@ export class SafeWeightLossCalculator {
                 }
             }
 
+            const isGoalFailed = !isGoalSuccess && idx > 0;
+            const excessKg = isGoalFailed ? this.round2(Math.max(0, w - weekTargetWeightKg)) : 0;
+
             return {
                 ...rec,
                 weightKg: w,
@@ -950,14 +953,35 @@ export class SafeWeightLossCalculator {
                 isStartRecord: idx === 0,
                 weekStartWeightKg,
                 weekTargetWeightKg,
-                isGoalSuccess
+                isGoalSuccess,
+                isGoalFailed,
+                excessKg
             };
         }).reverse();
+
+        // 현재 주차의 종료일 도달 여부 및 목표 달성/실패 판별 (오늘 날짜 및 최근 기록 날짜 기준)
+        const activeDateStr = latestDate > todayStr ? latestDate : todayStr;
+        const diffDays = Math.floor((parseLocalDate(activeDateStr).getTime() - parseLocalDate(startDateStr).getTime()) / (1000 * 60 * 60 * 24));
+        const daysIntoCurrentWeek = diffDays - (currentWeekNumber - 1) * 7;
+        const isCurrentWeekFinished = activeDateStr >= currentWeekRange.weekEndStr || daysIntoCurrentWeek >= 6 || sorted.length >= 7;
 
         const isThisWeekGoalSuccess =
             sorted.length > 0 &&
             (pastRecordsWithMeta.some(r => r.weekNumber === currentWeekNumber && r.isGoalSuccess) ||
                 (sorted.length > 1 && remainingToLoseThisWeekKg <= 0.01));
+
+        let isThisWeekGoalFailed = false;
+        let excessWeightKg = 0;
+        if (!isThisWeekGoalSuccess && isCurrentWeekFinished && currentWeightKg > thisWeekTargetWeightKg + 0.01) {
+            isThisWeekGoalFailed = true;
+            excessWeightKg = this.round2(currentWeightKg - thisWeekTargetWeightKg);
+        }
+
+        // 초과 몸무게 만회 코스 (1WEEK: 1주일 집중 감량 / 1MONTH: 1달 4주 분할 감량)
+        const catchupMode = profile.missedGoalCatchupMode || "1MONTH";
+        const excessPerWeekMonth = this.round2(excessWeightKg / 4);
+        const catchupKcal1Week = Math.round((excessWeightKg * 7700) / 7);
+        const catchupKcal1Month = Math.round((excessWeightKg * 7700) / 28);
 
         // 이후 주차별 예상 몸무게 시뮬레이션 로드맵 생성 (1주차 시작일 기준 7일 단위)
         const futureWeeklyRoadmap = [];
@@ -965,7 +989,7 @@ export class SafeWeightLossCalculator {
         let simFatMass = currentFatMassKg;
         let weekOffset = 1;
 
-        // 먼저 현재 진행 중인 주차(예: 1주차)의 종료 목표 행 추가
+        // 먼저 현재 진행 중인 주차의 종료 행 추가
         const thisWeekEndWeight = this.round2(Math.max(targetWeightKg, currentWeightKg - remainingToLoseThisWeekKg));
         const thisWeekEndFatMass = this.round2(Math.max(5, simFatMass - remainingToLoseThisWeekKg * 0.9));
         futureWeeklyRoadmap.push({
@@ -973,11 +997,13 @@ export class SafeWeightLossCalculator {
             isCurrentWeek: true,
             dateRangeText: `${currentWeekRange.weekStartStr.slice(5)} ~ ${currentWeekRange.weekEndStr.slice(5)}`,
             weeklyLossKg: remainingToLoseThisWeekKg,
-            expectedWeightKg: thisWeekEndWeight,
-            expectedFatPercent: this.round1((thisWeekEndFatMass / thisWeekEndWeight) * 100)
+            expectedWeightKg: isThisWeekGoalFailed ? currentWeightKg : thisWeekEndWeight,
+            expectedFatPercent: this.round1((thisWeekEndFatMass / (isThisWeekGoalFailed ? currentWeightKg : thisWeekEndWeight)) * 100),
+            isFailed: isThisWeekGoalFailed,
+            excessWeightKg
         });
 
-        simWeight = thisWeekEndWeight;
+        simWeight = isThisWeekGoalFailed ? currentWeightKg : thisWeekEndWeight;
         simFatMass = thisWeekEndFatMass;
 
         while (simWeight > targetWeightKg + 0.05 && weekOffset <= 52) {
@@ -990,8 +1016,19 @@ export class SafeWeightLossCalculator {
                 minTargetMuscleKg,
                 0
             );
+
+            // 만회 코스 반영: 1WEEK면 다음 1주에 초과분 전액 반영, 1MONTH면 향후 4주간 분할 반영
+            let additionalLoss = 0;
+            if (isThisWeekGoalFailed && excessWeightKg > 0) {
+                if (catchupMode === "1WEEK" && weekOffset === 1) {
+                    additionalLoss = excessWeightKg;
+                } else if (catchupMode === "1MONTH" && weekOffset <= 4) {
+                    additionalLoss = excessPerWeekMonth;
+                }
+            }
+
             const stepLoss = Math.min(
-                stepCalc.weeklyTargetLossKg,
+                this.round2(stepCalc.weeklyTargetLossKg + additionalLoss),
                 this.round2(simWeight - targetWeightKg)
             );
             simWeight = this.round2(simWeight - stepLoss);
@@ -1007,7 +1044,8 @@ export class SafeWeightLossCalculator {
                 dateRangeText: `${nextRange.weekStartStr.slice(5)} ~ ${nextRange.weekEndStr.slice(5)}`,
                 weeklyLossKg: stepLoss,
                 expectedWeightKg: simWeight,
-                expectedFatPercent: nextFatPct
+                expectedFatPercent: nextFatPct,
+                additionalLoss
             });
 
             weekOffset++;
@@ -1082,6 +1120,12 @@ export class SafeWeightLossCalculator {
             remainingToLoseThisWeekKg,
             weeklyProgressRatio,
             isThisWeekGoalSuccess,
+            isThisWeekGoalFailed,
+            excessWeightKg,
+            catchupMode,
+            catchupKcal1Week,
+            catchupKcal1Month,
+            excessPerWeekMonth,
             targetWeightKg,
             minTargetMuscleKg,
             targetFatPercent,

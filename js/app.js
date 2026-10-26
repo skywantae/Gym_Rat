@@ -51,6 +51,27 @@ class GymRatApp {
 
         window.addEventListener("resize", handleViewportChange);
         window.addEventListener("orientationchange", handleViewportChange);
+
+        // PC-모바일 실시간 연동: 탭 활성화 또는 창 포커스 복귀 시 백그라운드 클라우드 자동 동기화
+        const handleCloudAutoPull = () => {
+            const syncInfo = FirebaseSyncService.getActiveSyncInfo();
+            if (syncInfo.nickname && syncInfo.syncKey) {
+                FirebaseSyncService.syncWithCloud(syncInfo.syncKey, syncInfo.nickname)
+                    .then(res => {
+                        if (res && res.success) {
+                            this.renderAll();
+                        }
+                    })
+                    .catch(e => console.warn("Cloud background sync error:", e));
+            }
+        };
+
+        window.addEventListener("visibilitychange", () => {
+            if (document.visibilityState === "visible") {
+                handleCloudAutoPull();
+            }
+        });
+        window.addEventListener("focus", handleCloudAutoPull);
     }
 
     showToast(message) {
@@ -143,7 +164,21 @@ class GymRatApp {
         const muscleInput = document.getElementById("input-body-muscle");
         const fatMassInput = document.getElementById("input-body-fat-mass");
         const fatPctInput = document.getElementById("input-body-fat-pct");
+        const calcFatMassBadge = document.getElementById("display-calc-fat-mass");
         const memoInput = document.getElementById("input-body-memo");
+
+        const updateFatMassDisplay = () => {
+            const w = parseFloat(weightInput.value);
+            const pct = parseFloat(fatPctInput.value);
+            if (w > 0 && !isNaN(pct) && pct >= 0) {
+                const fm = SafeWeightLossCalculator.round2(w * (pct / 100));
+                if (calcFatMassBadge) calcFatMassBadge.textContent = `${fm.toFixed(2)} kg`;
+                if (fatMassInput) fatMassInput.value = fm.toFixed(2);
+            } else {
+                if (calcFatMassBadge) calcFatMassBadge.textContent = "0.00 kg";
+                if (fatMassInput) fatMassInput.value = "";
+            }
+        };
 
         dateInput.addEventListener("change", () => {
             const selectedDate = dateInput.value;
@@ -152,39 +187,15 @@ class GymRatApp {
             if (found) {
                 weightInput.value = Number(found.weightKg).toFixed(2);
                 muscleInput.value = Number(found.skeletalMuscleMassKg).toFixed(2);
-                const fm = found.bodyFatMassKg != null
-                    ? Number(found.bodyFatMassKg)
-                    : SafeWeightLossCalculator.round2(found.weightKg * (found.bodyFatPercentage / 100));
-                fatMassInput.value = fm.toFixed(2);
                 fatPctInput.value = Number(found.bodyFatPercentage).toFixed(1);
+                updateFatMassDisplay();
                 memoInput.value = found.memo || "";
             }
         });
 
-        // 체중 / 체지방량(kg) / 체지방률(%) 실시간 자동 상호 계산
-        weightInput.addEventListener("input", () => {
-            const w = parseFloat(weightInput.value);
-            const fm = parseFloat(fatMassInput.value);
-            if (w > 0 && !isNaN(fm)) {
-                fatPctInput.value = ((fm / w) * 100).toFixed(1);
-            }
-        });
-
-        fatMassInput.addEventListener("input", () => {
-            const fm = parseFloat(fatMassInput.value);
-            const w = parseFloat(weightInput.value);
-            if (w > 0 && !isNaN(fm)) {
-                fatPctInput.value = ((fm / w) * 100).toFixed(1);
-            }
-        });
-
-        fatPctInput.addEventListener("input", () => {
-            const pct = parseFloat(fatPctInput.value);
-            const w = parseFloat(weightInput.value);
-            if (w > 0 && !isNaN(pct)) {
-                fatMassInput.value = (w * (pct / 100)).toFixed(2);
-            }
-        });
+        // 체중 및 체지방률(%) 입력 시 체지방량(kg) 실시간 자동 계산
+        weightInput.addEventListener("input", updateFatMassDisplay);
+        fatPctInput.addEventListener("input", updateFatMassDisplay);
 
         // 체성분 저장 폼 제출
         document.getElementById("form-body-record").addEventListener("submit", e => {
@@ -394,20 +405,47 @@ class GymRatApp {
         document.getElementById("latest-record-date").textContent = hasRecords
             ? `최근 기록일: ${plan.latestDate} (1주차 시작일: ${plan.startDateStr} · 총 ${weightRecords.length}회 기록)`
             : "등록된 체성분 기록이 없습니다. [오늘 체성분 입력]으로 1주차 시작일을 기록하세요.";
-        document.getElementById("current-week-pill").textContent = !hasRecords
-            ? "1주차 시작 대기"
-            : plan.isThisWeekGoalSuccess
-                ? `${plan.currentWeekNumber}주차 목표 성공`
-                : plan.latestDate === plan.startDateStr
-                    ? "1주차 (시작일)"
-                    : `${plan.currentWeekNumber}주차 진행 중`;
+        const weekPill = document.getElementById("current-week-pill");
+        if (!hasRecords) {
+            weekPill.textContent = "1주차 시작 대기";
+            weekPill.className = "week-status-pill";
+        } else if (plan.isThisWeekGoalFailed) {
+            weekPill.textContent = `${plan.currentWeekNumber}주차 목표 실패 (초과 +${plan.excessWeightKg.toFixed(2)}kg)`;
+            weekPill.className = "week-status-pill failure";
+        } else if (plan.isThisWeekGoalSuccess) {
+            weekPill.textContent = `${plan.currentWeekNumber}주차 목표 성공`;
+            weekPill.className = "week-status-pill success";
+        } else if (plan.latestDate === plan.startDateStr) {
+            weekPill.textContent = "1주차 (시작일)";
+            weekPill.className = "week-status-pill";
+        } else {
+            weekPill.textContent = `${plan.currentWeekNumber}주차 진행 중`;
+            weekPill.className = "week-status-pill";
+        }
+
         document.getElementById("atflee-current-weight").textContent = plan.currentWeightKg.toFixed(2);
-        document.getElementById("atflee-weekly-remaining").textContent = plan.isThisWeekGoalSuccess
-            ? "성공 (0.00)"
-            : `- ${plan.remainingToLoseThisWeekKg.toFixed(2)}`;
-        document.getElementById("atflee-weekly-sub1").textContent = plan.isThisWeekGoalSuccess
-            ? `${plan.currentWeekNumber}주차 목표(${plan.thisWeekTargetWeightKg.toFixed(2)}kg) 도달 성공`
-            : `${plan.currentWeekNumber}주차 권장 -${plan.weeklyTargetLossKg.toFixed(2)}kg (목표 ${plan.thisWeekTargetWeightKg.toFixed(2)}kg)`;
+
+        const remainingEl = document.getElementById("atflee-weekly-remaining");
+        if (plan.isThisWeekGoalFailed) {
+            remainingEl.textContent = `실패 (+${plan.excessWeightKg.toFixed(2)})`;
+            remainingEl.className = "metric-value-huge text-danger";
+        } else if (plan.isThisWeekGoalSuccess) {
+            remainingEl.textContent = "성공 (0.00)";
+            remainingEl.className = "metric-value-huge text-lime";
+        } else {
+            remainingEl.textContent = `- ${plan.remainingToLoseThisWeekKg.toFixed(2)}`;
+            remainingEl.className = "metric-value-huge";
+        }
+
+        const sub1El = document.getElementById("atflee-weekly-sub1");
+        if (plan.isThisWeekGoalFailed) {
+            const catchupLabel = (plan.catchupMode === "1WEEK") ? "1주일 집중 보정" : "1달(4주) 분산 보정";
+            sub1El.textContent = `${plan.currentWeekNumber}주차 목표(${plan.thisWeekTargetWeightKg.toFixed(2)}kg) 미달성 (+${plan.excessWeightKg.toFixed(2)}kg 초과 · ${catchupLabel})`;
+        } else if (plan.isThisWeekGoalSuccess) {
+            sub1El.textContent = `${plan.currentWeekNumber}주차 목표(${plan.thisWeekTargetWeightKg.toFixed(2)}kg) 도달 성공`;
+        } else {
+            sub1El.textContent = `${plan.currentWeekNumber}주차 권장 -${plan.weeklyTargetLossKg.toFixed(2)}kg (목표 ${plan.thisWeekTargetWeightKg.toFixed(2)}kg)`;
+        }
         document.getElementById("atflee-weekly-sub2").textContent =
             `터치하여 ${plan.currentWeekNumber}주차 이전 기록 및 이후 몸무게 보기`;
 
@@ -656,12 +694,19 @@ class GymRatApp {
                 ? `첫 체성분 기록을 등록하면 해당 날짜가 1주차 시작일로 지정되며, 목표(${plan.targetWeightKg.toFixed(1)}kg)까지 주차별 로드맵이 생성됩니다.`
                 : `1주차 시작일(${plan.startDateStr}) 기준 측정 기록(${records.length}회)과 이후 목표(${plan.targetWeightKg.toFixed(1)}kg) 도달 예상 몸무게입니다.`;
 
+        let weekStatusBadge = "";
+        if (plan.isThisWeekGoalSuccess) {
+            weekStatusBadge = '<span class="roadmap-goal-badge success">성공</span>';
+        } else if (plan.isThisWeekGoalFailed) {
+            weekStatusBadge = '<span class="roadmap-goal-badge failure">실패</span>';
+        }
+
         const bannerEl = document.getElementById("roadmap-current-week-banner");
         bannerEl.innerHTML = `
             <div style="display: flex; justify-content: space-between; align-items: center;">
                 <div style="display: flex; align-items: center; gap: 6px;">
-                    <strong class="text-lime" style="font-size: 13.5px;">현재 ${plan.currentWeekNumber}주차 목표 요약</strong>
-                    ${plan.isThisWeekGoalSuccess ? '<span class="roadmap-goal-badge success">성공</span>' : ""}
+                    <strong class="${plan.isThisWeekGoalFailed ? "text-danger" : "text-lime"}" style="font-size: 13.5px;">현재 ${plan.currentWeekNumber}주차 목표 요약</strong>
+                    ${weekStatusBadge}
                 </div>
                 <span style="font-size: 11.5px; color: var(--text-secondary);">주간 권장 감량: -${plan.weeklyTargetLossKg.toFixed(2)}kg</span>
             </div>
@@ -676,10 +721,62 @@ class GymRatApp {
                 </div>
                 <div>
                     <span>${plan.currentWeekNumber}주차 목표</span>
-                    <strong class="text-lime">${plan.thisWeekTargetWeightKg.toFixed(2)}kg ${plan.isThisWeekGoalSuccess ? "(성공)" : ""}</strong>
+                    <strong class="${plan.isThisWeekGoalFailed ? "text-danger" : "text-lime"}">${plan.thisWeekTargetWeightKg.toFixed(2)}kg ${plan.isThisWeekGoalSuccess ? "(성공)" : plan.isThisWeekGoalFailed ? "(실패)" : ""}</strong>
                 </div>
             </div>
         `;
+
+        // 1주차 목표 미달성 시 1주일 vs 1달 보정 감량 선택 UI 컨테이너
+        const catchupContainer = document.getElementById("roadmap-catchup-container");
+        if (catchupContainer) {
+            if (plan.isThisWeekGoalFailed) {
+                const is1Week = plan.catchupMode === "1WEEK";
+                catchupContainer.innerHTML = `
+                    <div class="catchup-plan-card">
+                        <div class="catchup-header">
+                            <span class="catchup-badge">목표 미달성 보정 플랜</span>
+                            <strong style="font-size: 13.5px; color: var(--coral-danger);">
+                                ${plan.currentWeekNumber}주차 목표 대비 +${plan.excessWeightKg.toFixed(2)}kg 초과 (실패)
+                            </strong>
+                        </div>
+                        <p class="catchup-desc">
+                            1주차 목표 감량치를 달성하지 못했습니다. 초과된 <strong>+${plan.excessWeightKg.toFixed(2)}kg</strong>을 다음 1주일 동안 빠르게 보정 감량할지, 1달(4주) 동안 무리 없이 분산 감량할지 선택해주세요.
+                        </p>
+                        <div class="catchup-options-grid">
+                            <button type="button" class="btn-catchup-plan ${is1Week ? "active" : ""}" data-mode="1WEEK">
+                                <span class="catchup-btn-title">1주일 집중 감량 플랜</span>
+                                <span class="catchup-btn-meta">다음 주차에 기본 감량폭(-${plan.weeklyTargetLossKg.toFixed(2)}kg)에 초과분(-${plan.excessWeightKg.toFixed(2)}kg)을 더해 <strong>총 -${(plan.weeklyTargetLossKg + plan.excessWeightKg).toFixed(2)}kg</strong> 즉시 감량</span>
+                                <span class="catchup-btn-kcal">일일 추가 약 -${plan.catchupKcal1Week.toLocaleString()} kcal 적자 권장</span>
+                            </button>
+                            <button type="button" class="btn-catchup-plan ${!is1Week ? "active" : ""}" data-mode="1MONTH">
+                                <span class="catchup-btn-title">1달(4주) 분산 감량 플랜</span>
+                                <span class="catchup-btn-meta">향후 4주에 걸쳐 매주 초과분의 1/4(-${plan.excessPerWeekMonth.toFixed(2)}kg)씩 나누어 <strong>매주 -${(plan.weeklyTargetLossKg + plan.excessPerWeekMonth).toFixed(2)}kg</strong> 안전 분산 감량</span>
+                                <span class="catchup-btn-kcal">일일 추가 약 -${plan.catchupKcal1Month.toLocaleString()} kcal 적자 권장</span>
+                            </button>
+                        </div>
+                    </div>
+                `;
+
+                catchupContainer.querySelectorAll(".btn-catchup-plan").forEach(btn => {
+                    btn.addEventListener("click", async () => {
+                        const mode = btn.dataset.mode;
+                        const currProfile = GymRatStorage.getProfile();
+                        currProfile.missedGoalCatchupMode = mode;
+                        GymRatStorage.saveProfile(currProfile);
+                        await FirebaseSyncService.autoSyncIfActive();
+                        this.renderAll();
+                        this.renderWeeklyRoadmapModalContent();
+                        this.showToast(
+                            mode === "1WEEK"
+                                ? "초과 체중을 '1주일 집중 감량 플랜'으로 보정하도록 로드맵을 갱신했습니다."
+                                : "초과 체중을 '1달(4주) 분산 감량 플랜'으로 분산 보정하도록 로드맵을 갱신했습니다."
+                        );
+                    });
+                });
+            } else {
+                catchupContainer.innerHTML = "";
+            }
+        }
 
         const tabPastBtn = document.getElementById("tab-btn-roadmap-past");
         const tabFutureBtn = document.getElementById("tab-btn-roadmap-future");
@@ -698,7 +795,7 @@ class GymRatApp {
             panelFuture.classList.remove("hidden");
         }
 
-        // 1) 이전 측정 기록 렌더링 (주차별 목표 몸무게 도달 시 '성공' 배지 및 문구 표시)
+        // 1) 이전 측정 기록 렌더링 (주차별 목표 달성 시 '성공', 미달성 시 '실패' 배지 및 문구 표시)
         const pastRowsEl = document.getElementById("roadmap-past-rows");
         if (plan.pastRecordsWithMeta.length === 0) {
             pastRowsEl.innerHTML = `<p class="empty-hint" style="padding: 18px 8px; text-align: center;">저장된 측정 기록이 없습니다. 상단 [오늘 체성분 입력] 버튼을 눌러 1주차 시작일을 기록하세요.</p>`;
@@ -711,15 +808,32 @@ class GymRatApp {
                         ? "1주차 (시작일)"
                         : `${rec.weekNumber}주차 ${isLatest ? "(현재)" : ""}`;
                     const deltaLabel = rec.isStartRecord ? "시작 기준점" : `${deltaSign} kg`;
-                    const targetSubText = rec.isGoalSuccess
-                        ? `${deltaLabel} · 목표(${rec.weekTargetWeightKg.toFixed(2)}kg) 성공`
-                        : rec.isStartRecord
-                            ? deltaLabel
-                            : `${deltaLabel} (목표 ${rec.weekTargetWeightKg.toFixed(2)}kg)`;
+                    let statusBadge = "";
+                    let inlineBadge = "";
+                    let targetSubText = "";
+                    let subTextClass = "";
+
+                    if (rec.isGoalSuccess) {
+                        statusBadge = '<span class="roadmap-goal-badge success">성공</span>';
+                        inlineBadge = '<span class="roadmap-inline-success">성공</span>';
+                        targetSubText = `${deltaLabel} · 목표(${rec.weekTargetWeightKg.toFixed(2)}kg) 성공`;
+                        subTextClass = "text-lime";
+                    } else if (rec.isGoalFailed) {
+                        statusBadge = '<span class="roadmap-goal-badge failure">실패</span>';
+                        inlineBadge = '<span class="roadmap-inline-failure">실패</span>';
+                        targetSubText = `${deltaLabel} · 목표(${rec.weekTargetWeightKg.toFixed(2)}kg) 대비 +${rec.excessKg.toFixed(2)}kg 초과 (실패)`;
+                        subTextClass = "text-danger";
+                    } else if (rec.isStartRecord) {
+                        targetSubText = deltaLabel;
+                    } else {
+                        targetSubText = `${deltaLabel} (목표 ${rec.weekTargetWeightKg.toFixed(2)}kg)`;
+                    }
+
                     const rowClassList = [
                         "roadmap-row",
                         isLatest ? "current-week-highlight" : "",
-                        rec.isGoalSuccess ? "goal-success-row" : ""
+                        rec.isGoalSuccess ? "goal-success-row" : "",
+                        rec.isGoalFailed ? "goal-failure-row" : ""
                     ]
                         .filter(Boolean)
                         .join(" ");
@@ -729,13 +843,13 @@ class GymRatApp {
                     <div>
                         <div class="roadmap-week-title-row">
                             <strong>${weekTitle}</strong>
-                            ${rec.isGoalSuccess ? '<span class="roadmap-goal-badge success">성공</span>' : ""}
+                            ${statusBadge}
                         </div>
                         <span class="roadmap-sub">${rec.recordDate}</span>
                     </div>
                     <div>
-                        <strong>${rec.weightKg.toFixed(2)} kg ${rec.isGoalSuccess ? '<span class="roadmap-inline-success">성공</span>' : ""}</strong>
-                        <span class="roadmap-sub ${rec.isGoalSuccess ? "text-lime" : ""}">${targetSubText}</span>
+                        <strong>${rec.weightKg.toFixed(2)} kg ${inlineBadge}</strong>
+                        <span class="roadmap-sub ${subTextClass}">${targetSubText}</span>
                     </div>
                     <div>
                         <strong>골격근 ${rec.skeletalMuscleMassKg.toFixed(2)}kg</strong>
@@ -780,8 +894,12 @@ class GymRatApp {
         document.getElementById("input-body-date").value = this.todayStr;
         document.getElementById("input-body-weight").value = plan.currentWeightKg.toFixed(2);
         document.getElementById("input-body-muscle").value = plan.currentMuscleKg.toFixed(2);
-        document.getElementById("input-body-fat-mass").value = plan.currentFatMassKg.toFixed(2);
         document.getElementById("input-body-fat-pct").value = plan.currentFatPercent.toFixed(1);
+
+        const fatMassInput = document.getElementById("input-body-fat-mass");
+        const calcBadge = document.getElementById("display-calc-fat-mass");
+        if (fatMassInput) fatMassInput.value = plan.currentFatMassKg.toFixed(2);
+        if (calcBadge) calcBadge.textContent = `${plan.currentFatMassKg.toFixed(2)} kg`;
 
         const todayExisting = records.find(r => r.recordDate === this.todayStr);
         document.getElementById("input-body-memo").value = todayExisting ? (todayExisting.memo || "") : "";
@@ -789,12 +907,11 @@ class GymRatApp {
         document.getElementById("modal-body-record").classList.remove("hidden");
     }
 
-    handleSaveBodyRecord() {
+    async handleSaveBodyRecord() {
         const recordDate = document.getElementById("input-body-date").value || getLocalDateString();
         const weightKg = parseFloat(document.getElementById("input-body-weight").value);
         const skeletalMuscleMassKg = parseFloat(document.getElementById("input-body-muscle").value);
-        let bodyFatMassKg = parseFloat(document.getElementById("input-body-fat-mass").value);
-        let bodyFatPercentage = parseFloat(document.getElementById("input-body-fat-pct").value);
+        const bodyFatPercentage = parseFloat(document.getElementById("input-body-fat-pct").value);
         const memo = document.getElementById("input-body-memo").value.trim();
 
         if (isNaN(weightKg) || weightKg <= 0 || isNaN(skeletalMuscleMassKg) || skeletalMuscleMassKg <= 0) {
@@ -802,28 +919,31 @@ class GymRatApp {
             return;
         }
 
-        if (isNaN(bodyFatPercentage) && !isNaN(bodyFatMassKg)) {
-            bodyFatPercentage = SafeWeightLossCalculator.round1((bodyFatMassKg / weightKg) * 100);
-        } else if (isNaN(bodyFatMassKg) && !isNaN(bodyFatPercentage)) {
-            bodyFatMassKg = SafeWeightLossCalculator.round2(weightKg * (bodyFatPercentage / 100));
+        if (isNaN(bodyFatPercentage) || bodyFatPercentage <= 0) {
+            this.showToast("체지방률(%)을 올바르게 입력해주세요.");
+            return;
         }
+
+        // 체지방률(%)과 몸무게(kg)로부터 체지방량(kg) 자동 계산
+        const bodyFatMassKg = SafeWeightLossCalculator.round2(weightKg * (bodyFatPercentage / 100));
 
         const updatedList = GymRatStorage.upsertWeightRecord({
             recordDate,
             weightKg,
             skeletalMuscleMassKg,
-            bodyFatMassKg: isNaN(bodyFatMassKg) ? 29.86 : bodyFatMassKg,
-            bodyFatPercentage: isNaN(bodyFatPercentage) ? 28.6 : bodyFatPercentage,
+            bodyFatMassKg,
+            bodyFatPercentage,
             memo
         });
 
         this.selectedChartPointIndex = updatedList.length - 1;
         this.closeAllModals();
         this.renderAll();
-        FirebaseSyncService.autoSyncIfActive();
+        await FirebaseSyncService.autoSyncIfActive();
         this.showToast(
-            `${recordDate} 체성분 기록 반영 완료: ${weightKg.toFixed(2)}kg (총 ${updatedList.length}건 기록 보존)`
+            `${recordDate} 체성분 기록 반영 완료: ${weightKg.toFixed(2)}kg · 체지방량 ${bodyFatMassKg.toFixed(2)}kg 자동 계산 (총 ${updatedList.length}건 기록 보존)`
         );
+    }
     }
 
     openGoalSettingModal() {
@@ -1131,16 +1251,35 @@ class GymRatApp {
         const profile = GymRatStorage.getProfile();
         const records = GymRatStorage.getWeightRecords();
 
-        // 1. 이미 로그인 세션이 활성화되어 있고 설문을 완료했거나 체성분 기록이 있는 경우: 즉시 메인 대시보드로 복원 진입
+        // 1. 이미 로그인 세션이 활성화되어 있고 설문을 완료했거나 체성분 기록이 있는 경우: 즉시 메인 대시보드로 복원 진입 후 클라우드 최신 동기화 풀
         if (syncInfo.nickname && syncInfo.syncKey && (profile.onboardingCompleted || records.length > 0)) {
             this.enterMainDashboard();
-            FirebaseSyncService.autoSyncIfActive();
+            FirebaseSyncService.syncWithCloud(syncInfo.syncKey, syncInfo.nickname)
+                .then(res => {
+                    if (res && res.success) {
+                        this.renderAll();
+                    }
+                })
+                .catch(e => console.warn("Startup cloud sync error:", e));
             return;
         }
 
-        // 2. 로그인 세션은 있으나 온보딩 설문을 아직 마치지 않은 경우: 설문 위저드 화면으로 복원
+        // 2. 로그인 세션은 있으나 로컬 온보딩 완료 플래그가 없는 경우: 클라우드에 기존 데이터가 있는지 먼저 동기화 시도
         if (syncInfo.nickname && syncInfo.syncKey && !profile.onboardingCompleted) {
-            this.openOnboardingWizard(syncInfo.nickname);
+            FirebaseSyncService.syncWithCloud(syncInfo.syncKey, syncInfo.nickname)
+                .then(res => {
+                    const refreshedProfile = GymRatStorage.getProfile();
+                    const refreshedRecords = GymRatStorage.getWeightRecords();
+                    if (refreshedProfile.onboardingCompleted || refreshedRecords.length > 0) {
+                        this.enterMainDashboard();
+                        this.renderAll();
+                    } else {
+                        this.openOnboardingWizard(syncInfo.nickname);
+                    }
+                })
+                .catch(() => {
+                    this.openOnboardingWizard(syncInfo.nickname);
+                });
             return;
         }
 

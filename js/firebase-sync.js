@@ -151,6 +151,70 @@ export class FirebaseSyncService {
     }
 
     /**
+     * 클라우드와 로컬 스토리지 간의 양방향 무손실 동기화를 실행합니다.
+     * - 클라우드에서 최신 데이터를 가져와 로컬 데이터와 무손실 병합 (날짜별 체성분 기록 합집합)
+     * - 병합된 최신 결과를 클라우드에 업로드하여 다른 기기(모바일/PC)와 즉시 실시간 동기화
+     */
+    static async syncWithCloud(syncKey, nickname) {
+        if (!syncKey || !nickname) return { success: false, reason: "NO_ACTIVE_SESSION" };
+        const cleanNickDisplay = String(nickname).trim();
+
+        try {
+            const docResult = await fetchFirestoreDoc(syncKey);
+
+            if (docResult.exists && docResult.data) {
+                const mergedResult = GymRatStorage.importUserDataJson(docResult.data);
+                const now = Date.now();
+                const updatedPayload = {
+                    ...mergedResult,
+                    customMeals: GymRatStorage.getCustomOnboardMeals() || [],
+                    syncKey,
+                    nickname: cleanNickDisplay,
+                    updatedAt: now
+                };
+
+                await saveFirestoreDoc(syncKey, updatedPayload);
+                GymRatStorage.saveSlotSnapshot(syncKey);
+                this.setActiveSyncInfo(syncKey, cleanNickDisplay);
+
+                return {
+                    success: true,
+                    mode: "MERGED",
+                    syncKey,
+                    nickname: cleanNickDisplay,
+                    recordsCount: updatedPayload.weightRecords.length,
+                    updatedAt: now
+                };
+            } else {
+                const localExport = GymRatStorage.exportUserDataJson();
+                const now = Date.now();
+                const payload = {
+                    ...localExport,
+                    syncKey,
+                    nickname: cleanNickDisplay,
+                    createdAt: now,
+                    updatedAt: now
+                };
+                await saveFirestoreDoc(syncKey, payload);
+                GymRatStorage.saveSlotSnapshot(syncKey);
+                this.setActiveSyncInfo(syncKey, cleanNickDisplay);
+
+                return {
+                    success: true,
+                    mode: "CREATED",
+                    syncKey,
+                    nickname: cleanNickDisplay,
+                    recordsCount: payload.weightRecords.length,
+                    updatedAt: now
+                };
+            }
+        } catch (err) {
+            console.warn("Cloud sync warning:", err);
+            return { success: false, error: err.message };
+        }
+    }
+
+    /**
      * 랜딩 페이지에서 아이디 + PIN 입력 시 실행되는 초고속 통합 로그인/자동 가입
      * - 이미 저장된 아이디+PIN이면 즉시 데이터를 불러와 로그인 (RESTORED)
      * - 처음 입력한 아이디+PIN이면 즉시 새 계정을 생성하여 시작 (CREATED)
@@ -172,49 +236,11 @@ export class FirebaseSyncService {
             GymRatStorage.replaceUserDataJson(targetSlot);
         }
 
-        const docResult = await fetchFirestoreDoc(syncKey);
-
-        if (docResult.exists && docResult.data) {
-            const mergedResult = GymRatStorage.importUserDataJson(docResult.data);
-            const updatedPayload = {
-                ...mergedResult,
-                syncKey,
-                nickname: cleanNickDisplay,
-                updatedAt: Date.now()
-            };
-            await saveFirestoreDoc(syncKey, updatedPayload);
-            GymRatStorage.saveSlotSnapshot(syncKey);
-            this.setActiveSyncInfo(syncKey, cleanNickDisplay);
-            return {
-                success: true,
-                mode: "RESTORED",
-                syncKey,
-                nickname: cleanNickDisplay,
-                recordsCount: updatedPayload.weightRecords.length,
-                updatedAt: updatedPayload.updatedAt
-            };
-        } else {
-            const localExport = GymRatStorage.exportUserDataJson();
-            const now = Date.now();
-            const payload = {
-                ...localExport,
-                syncKey,
-                nickname: cleanNickDisplay,
-                createdAt: now,
-                updatedAt: now
-            };
-            await saveFirestoreDoc(syncKey, payload);
-            GymRatStorage.saveSlotSnapshot(syncKey);
-            this.setActiveSyncInfo(syncKey, cleanNickDisplay);
-            return {
-                success: true,
-                mode: "CREATED",
-                syncKey,
-                nickname: cleanNickDisplay,
-                recordsCount: payload.weightRecords.length,
-                updatedAt: payload.updatedAt
-            };
+        const result = await this.syncWithCloud(syncKey, cleanNickDisplay);
+        if (!result.success) {
+            throw new Error(result.error || "클라우드 연결 중 오류가 발생했습니다.");
         }
+        return result;
     }
 
     /**
@@ -223,24 +249,7 @@ export class FirebaseSyncService {
     static async backupToCloud(nickname, pin) {
         const cleanNickDisplay = String(nickname || "").trim();
         const syncKey = await this.generateSyncKey(cleanNickDisplay, pin);
-
-        const localExport = GymRatStorage.exportUserDataJson();
-        const payload = {
-            ...localExport,
-            syncKey,
-            nickname: cleanNickDisplay,
-            updatedAt: Date.now()
-        };
-
-        await saveFirestoreDoc(syncKey, payload);
-        GymRatStorage.saveSlotSnapshot(syncKey);
-        this.setActiveSyncInfo(syncKey, cleanNickDisplay);
-        return {
-            success: true,
-            syncKey,
-            recordsCount: payload.weightRecords.length,
-            updatedAt: payload.updatedAt
-        };
+        return await this.syncWithCloud(syncKey, cleanNickDisplay);
     }
 
     /**
@@ -255,49 +264,19 @@ export class FirebaseSyncService {
             GymRatStorage.resetToCleanUserWorkspace();
         }
 
-        const docResult = await fetchFirestoreDoc(syncKey);
-        if (!docResult.exists || !docResult.data) {
-            throw new Error("해당 아이디와 PIN으로 저장된 데이터가 없습니다. [클라우드에 백업] 또는 랜딩 화면에서 시작하기를 눌러주세요.");
+        const res = await this.syncWithCloud(syncKey, cleanNickDisplay);
+        if (!res.success) {
+            throw new Error(res.error || "클라우드 복원 실패");
         }
-
-        const mergedResult = GymRatStorage.importUserDataJson(docResult.data);
-        const updatedPayload = {
-            ...mergedResult,
-            syncKey,
-            nickname: cleanNickDisplay,
-            updatedAt: Date.now()
-        };
-        await saveFirestoreDoc(syncKey, updatedPayload);
-
-        GymRatStorage.saveSlotSnapshot(syncKey);
-        this.setActiveSyncInfo(syncKey, cleanNickDisplay);
-        return {
-            success: true,
-            syncKey,
-            recordsCount: updatedPayload.weightRecords.length,
-            updatedAt: updatedPayload.updatedAt
-        };
+        return res;
     }
 
     /**
-     * 로그인된 상태에서 기록 변경 시 백그라운드에서 즉시 클라우드에 자동 저장합니다.
+     * 로그인된 상태에서 기록 변경 시 백그라운드에서 최신 클라우드와 무손실 양방향 동기화합니다.
      */
     static async autoSyncIfActive() {
         const { syncKey, nickname } = this.getActiveSyncInfo();
         if (!syncKey || !nickname) return;
-        try {
-            GymRatStorage.saveSlotSnapshot(syncKey);
-            const localExport = GymRatStorage.exportUserDataJson();
-            const payload = {
-                ...localExport,
-                syncKey,
-                nickname,
-                updatedAt: Date.now()
-            };
-            await saveFirestoreDoc(syncKey, payload);
-            localStorage.setItem(LAST_SYNC_TIME_KEY, String(Date.now()));
-        } catch {
-            // 오프라인 상태일 경우 로컬 슬롯에 안전하게 보존됨
-        }
+        return await this.syncWithCloud(syncKey, nickname);
     }
 }

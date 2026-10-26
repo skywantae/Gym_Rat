@@ -9,7 +9,7 @@
     <title>GymRat - 과학적 체성분 감량 및 식단 운동 대시보드</title>
     <link rel="manifest" href="manifest.json" />
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/static/pretendard.min.css" />
-    <link rel="stylesheet" href="css/styles.css?v=20261022_2" />
+    <link rel="stylesheet" href="css/styles.css?v=20261026_1" />
 </head>
 <body>
     <!-- =================================================================
@@ -647,33 +647,34 @@
     <div id="modal-body-record" class="modal-backdrop hidden">
         <div class="modal-card">
             <h3>오늘 체성분 입력</h3>
-            <p class="modal-sub">체지방량(kg)을 입력하면 체지방률(%)이 자동 계산되며, 기존 날짜의 기록들은 모두 안전하게 보존됩니다.</p>
+            <p class="modal-sub">몸무게, 골격근량, 체지방률만 입력하시면 체지방량(kg)은 자동으로 정밀 계산됩니다.</p>
             <form id="form-body-record">
                 <div class="form-group">
                     <label for="input-body-date">측정 날짜</label>
                     <input type="date" id="input-body-date" class="form-input" required />
                 </div>
-                <div class="form-row-2">
+                <div class="form-row-3">
                     <div class="form-group">
                         <label for="input-body-weight">몸무게 (kg)</label>
-                        <input type="number" step="0.01" id="input-body-weight" class="form-input" required />
+                        <input type="number" step="0.01" id="input-body-weight" class="form-input" placeholder="예: 82.5" required />
                     </div>
                     <div class="form-group">
                         <label for="input-body-muscle">골격근량 (kg)</label>
-                        <input type="number" step="0.01" id="input-body-muscle" class="form-input" required />
-                    </div>
-                </div>
-                <div class="form-row-2">
-                    <div class="form-group">
-                        <label for="input-body-fat-mass">체지방량 (kg)</label>
-                        <input type="number" step="0.01" id="input-body-fat-mass" class="form-input" required />
+                        <input type="number" step="0.01" id="input-body-muscle" class="form-input" placeholder="예: 34.8" required />
                     </div>
                     <div class="form-group">
                         <label for="input-body-fat-pct">체지방률 (%)</label>
-                        <input type="number" step="0.1" id="input-body-fat-pct" class="form-input" required />
+                        <input type="number" step="0.1" id="input-body-fat-pct" class="form-input" placeholder="예: 22.4" required />
                     </div>
                 </div>
-                <div class="form-group">
+                <!-- 체지방량 자동 계산 실시간 표시 배지 -->
+                <div class="calc-auto-badge-card">
+                    <span class="calc-auto-label">자동 산출 체지방량:</span>
+                    <strong id="display-calc-fat-mass" class="text-lime">0.00 kg</strong>
+                    <span class="calc-auto-formula">(몸무게 × 체지방률 ÷ 100)</span>
+                    <input type="hidden" id="input-body-fat-mass" />
+                </div>
+                <div class="form-group" style="margin-top: 12px;">
                     <label for="input-body-memo">메모 (공복 측정, 컨디션 등)</label>
                     <input type="text" id="input-body-memo" class="form-input" placeholder="예: 아침 기상 직후 공복 측정" />
                 </div>
@@ -845,6 +846,9 @@
 
             <!-- 현재 주차 핵심 요약 박스 -->
             <div id="roadmap-current-week-banner" class="roadmap-summary-banner"></div>
+
+            <!-- 목표 미달성 시 만회 플랜 설정 영역 -->
+            <div id="roadmap-catchup-container"></div>
 
             <!-- 탭 전환: [이전 측정 기록] | [이후 주차별 예상 몸무게] -->
             <div class="sub-tab-bar" style="margin-top: 12px;">

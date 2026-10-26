@@ -1223,6 +1223,159 @@ body {
     vertical-align: middle;
 }
 
+.roadmap-goal-badge.failure {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    padding: 1.5px 6px;
+    border-radius: 999px;
+    font-size: 10px;
+    font-weight: 800;
+    line-height: 1.3;
+    background-color: var(--coral-danger);
+    color: #ffffff;
+    letter-spacing: -0.02em;
+}
+
+.roadmap-inline-failure {
+    display: inline-block;
+    margin-left: 3px;
+    padding: 1px 5px;
+    border-radius: 5px;
+    font-size: 10px;
+    font-weight: 800;
+    background-color: rgba(248, 81, 73, 0.22);
+    border: 1px solid rgba(248, 81, 73, 0.6);
+    color: var(--coral-danger);
+    vertical-align: middle;
+}
+
+/* --- Catchup Plan Card & Options --- */
+.catchup-plan-card {
+    background: linear-gradient(135deg, rgba(33, 38, 45, 0.95) 0%, rgba(22, 27, 34, 0.98) 100%);
+    border: 1px solid rgba(248, 81, 73, 0.4);
+    border-left: 4px solid var(--coral-danger);
+    border-radius: 12px;
+    padding: 14px 16px;
+    margin-top: 12px;
+}
+
+.catchup-header {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-bottom: 6px;
+}
+
+.catchup-badge {
+    display: inline-block;
+    font-size: 10px;
+    font-weight: 800;
+    background: rgba(248, 81, 73, 0.2);
+    color: var(--coral-danger);
+    padding: 2px 7px;
+    border-radius: 4px;
+    border: 1px solid rgba(248, 81, 73, 0.4);
+}
+
+.catchup-desc {
+    font-size: 12px;
+    color: var(--text-secondary);
+    line-height: 1.45;
+    margin-bottom: 12px;
+}
+
+.catchup-options-grid {
+    display: grid;
+    grid-template-columns: 1fr;
+    gap: 10px;
+}
+
+@media (min-width: 600px) {
+    .catchup-options-grid {
+        grid-template-columns: 1fr 1fr;
+    }
+}
+
+.btn-catchup-plan {
+    background: rgba(22, 27, 34, 0.85);
+    border: 1px solid var(--border-subtle);
+    border-radius: 10px;
+    padding: 12px 14px;
+    text-align: left;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+}
+
+.btn-catchup-plan:hover {
+    border-color: var(--neon-lime);
+    background: rgba(33, 38, 45, 0.95);
+}
+
+.btn-catchup-plan.active {
+    border-color: var(--neon-lime);
+    background: rgba(57, 211, 83, 0.12);
+    box-shadow: 0 0 10px rgba(57, 211, 83, 0.2);
+}
+
+.catchup-btn-title {
+    font-size: 13.5px;
+    font-weight: 700;
+    color: var(--text-primary);
+}
+
+.btn-catchup-plan.active .catchup-btn-title {
+    color: var(--neon-lime);
+}
+
+.catchup-btn-meta {
+    font-size: 11.5px;
+    color: var(--text-secondary);
+    line-height: 1.35;
+}
+
+.catchup-btn-kcal {
+    font-size: 11px;
+    color: var(--electric-blue);
+    font-weight: 600;
+    margin-top: 2px;
+}
+
+/* --- Auto-calculated Fat Mass Badge in Body Modal --- */
+.calc-auto-badge-card {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    background: rgba(57, 211, 83, 0.08);
+    border: 1px dashed rgba(57, 211, 83, 0.35);
+    border-radius: 8px;
+    padding: 8px 12px;
+    font-size: 13px;
+    color: var(--text-primary);
+    margin-top: 6px;
+}
+
+.calc-auto-label {
+    color: var(--text-secondary);
+    font-size: 12px;
+    font-weight: 600;
+}
+
+.calc-auto-formula {
+    color: var(--text-secondary);
+    font-size: 11px;
+    margin-left: auto;
+}
+
+.week-status-pill.failure {
+    background-color: rgba(248, 81, 73, 0.15);
+    color: var(--coral-danger);
+    border: 1px solid rgba(248, 81, 73, 0.45);
+}
+
 .roadmap-row div:nth-child(2) { text-align: center; }
 .roadmap-row div:nth-child(3) { text-align: right; }
 

@@ -1629,6 +1629,10 @@ export class GymRatStorage {
             mergedProfile.heightCm = currentProfile.heightCm;
         }
 
+        if (incomingProfile.missedGoalCatchupMode || currentProfile.missedGoalCatchupMode) {
+            mergedProfile.missedGoalCatchupMode = incomingProfile.missedGoalCatchupMode || currentProfile.missedGoalCatchupMode;
+        }
+
         this.saveProfile(mergedProfile);
 
         // 3. 맞춤 식습관 목록 병합
@@ -1678,6 +1682,7 @@ export class GymRatStorage {
         return {
             profile: mergedProfile,
             customRoutines: this.getCustomRoutines(),
+            customMeals: this.getCustomOnboardMeals() || [],
             weightRecords: mergedWeights,
             dietRecords: mergedDiets,
             dailyChecklists: mergedChecklists,
