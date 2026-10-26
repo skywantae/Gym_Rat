@@ -944,7 +944,6 @@ class GymRatApp {
             `${recordDate} 체성분 기록 반영 완료: ${weightKg.toFixed(2)}kg · 체지방량 ${bodyFatMassKg.toFixed(2)}kg 자동 계산 (총 ${updatedList.length}건 기록 보존)`
         );
     }
-    }
 
     openGoalSettingModal() {
         const profile = GymRatStorage.getProfile();
