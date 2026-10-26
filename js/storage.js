@@ -567,6 +567,7 @@ export const HabitMealCatalog = {
  */
 export const FoodCategoryCatalog = {
     categories: [
+        { code: "SUPPLEMENT", label: "보충제·영양제" },
         { code: "FRUIT", label: "과일류" },
         { code: "PROTEIN", label: "단백질·육류·계란" },
         { code: "GRAIN", label: "곡류·밥·빵" },
@@ -575,6 +576,14 @@ export const FoodCategoryCatalog = {
         { code: "MEAL", label: "외식·국밥·식사" }
     ],
     items: [
+        // 0. 보충제·영양제
+        { id: "creatine", category: "SUPPLEMENT", name: "크레아틴 (모노하이드레이트)", unit: "g", defaultQty: 5, step: 1, min: 1, max: 20, baseQty: 5, kcal: 0, pro: 0, carb: 0, fat: 0 },
+        { id: "dymatize_iso100_gourmet_choco", category: "SUPPLEMENT", name: "다이마타이즈 ISO 100 웨이 프로틴 파우더 단백질 보충제 고메초콜릿", unit: "스쿱", defaultQty: 1, baseQty: 1, kcal: 120, pro: 25, carb: 2, fat: 0.5 },
+        { id: "whey_isolate", category: "SUPPLEMENT", name: "웨이 프로틴 단백질 보충제 (WPI)", unit: "스쿱", defaultQty: 1, baseQty: 1, kcal: 120, pro: 24, carb: 2, fat: 1 },
+        { id: "bcaa_powder", category: "SUPPLEMENT", name: "BCAA / 아미노산 (1회분)", unit: "회", defaultQty: 1, baseQty: 1, kcal: 20, pro: 5, carb: 0, fat: 0 },
+        { id: "omega3_capsule", category: "SUPPLEMENT", name: "오메가3 (1캡슐)", unit: "캡슐", defaultQty: 1, baseQty: 1, kcal: 10, pro: 0, carb: 0, fat: 1 },
+        { id: "multivitamin_tab", category: "SUPPLEMENT", name: "종합비타민 / 아르기닌", unit: "정", defaultQty: 1, baseQty: 1, kcal: 0, pro: 0, carb: 0, fat: 0 },
+
         // 1. 과일류
         { id: "apple", category: "FRUIT", name: "사과", unit: "개", defaultQty: 1, baseQty: 1, kcal: 110, pro: 1, carb: 28, fat: 0 },
         { id: "banana", category: "FRUIT", name: "바나나", unit: "개", defaultQty: 1, baseQty: 1, kcal: 105, pro: 1, carb: 27, fat: 0 },
@@ -664,6 +673,10 @@ export const FoodCategoryCatalog = {
  */
 export class SmartFoodCalorieEstimator {
     static FOOD_DB = [
+        // 0. 보충제 (다이마타이즈 ISO 100, 크레아틴 등)
+        { keys: ["다이마타이즈", "iso100", "iso 100", "다이마타이즈iso100", "고메초콜릿", "웨이프로틴파우더"], name: "다이마타이즈 ISO 100 고메초콜릿", unit: "스쿱", baseGrams: 30, kcal: 120, pro: 25, carb: 2, fat: 0.5 },
+        { keys: ["크레아틴", "크레아틴모노하이드레이트", "모노크레아틴"], name: "크레아틴", unit: "g", baseGrams: 5, kcal: 0, pro: 0, carb: 0, fat: 0 },
+
         // 1. 단백질 단품 (닭가슴살, 육류, 계란, 두부, 쉐이크)
         { keys: ["스팸3조각", "스팸조각", "스팸슬라이스", "구운스팸", "리챔", "런천미트", "스팸"], name: "스팸(슬라이스)", unit: "조각", baseGrams: 25, kcal: 85, pro: 3, carb: 1, fat: 8, isSpam: true },
         { keys: ["프로틴쉐이크", "단백질쉐이크", "단백질보충제", "프로틴", "쉐이크", "wpi", "wpc"], name: "단백질 쉐이크", unit: "스쿱", baseGrams: 35, kcal: 150, pro: 25, carb: 6, fat: 2 },
@@ -1629,8 +1642,8 @@ export class GymRatStorage {
             mergedProfile.heightCm = currentProfile.heightCm;
         }
 
-        if (incomingProfile.missedGoalCatchupMode || currentProfile.missedGoalCatchupMode) {
-            mergedProfile.missedGoalCatchupMode = incomingProfile.missedGoalCatchupMode || currentProfile.missedGoalCatchupMode;
+        if (currentProfile.missedGoalCatchupMode || incomingProfile.missedGoalCatchupMode) {
+            mergedProfile.missedGoalCatchupMode = currentProfile.missedGoalCatchupMode || incomingProfile.missedGoalCatchupMode;
         }
 
         this.saveProfile(mergedProfile);

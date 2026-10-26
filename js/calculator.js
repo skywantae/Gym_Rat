@@ -1053,8 +1053,9 @@ export class SafeWeightLossCalculator {
                 }
             }
 
+            const baseStepLoss = profile.customTargetDurationDays ? weeklyTargetLossKg : stepCalc.weeklyTargetLossKg;
             const stepLoss = Math.min(
-                this.round2(stepCalc.weeklyTargetLossKg + additionalLoss),
+                this.round2(baseStepLoss + additionalLoss),
                 this.round2(simWeight - targetWeightKg)
             );
             simWeight = this.round2(simWeight - stepLoss);
@@ -1071,7 +1072,9 @@ export class SafeWeightLossCalculator {
                 weeklyLossKg: stepLoss,
                 expectedWeightKg: simWeight,
                 expectedFatPercent: nextFatPct,
-                additionalLoss
+                additionalLoss,
+                baseLoss: baseStepLoss,
+                catchupMode
             });
 
             weekOffset++;

@@ -771,13 +771,15 @@ class GymRatApp {
                         const currProfile = GymRatStorage.getProfile();
                         currProfile.missedGoalCatchupMode = mode;
                         GymRatStorage.saveProfile(currProfile);
-                        await FirebaseSyncService.autoSyncIfActive();
+                        // 선택 즉시 이후 주차별 예상 몸무게 탭으로 자동 전환하여 변화를 체감할 수 있도록 함
+                        this.roadmapSubTab = "future";
                         this.renderAll();
                         this.renderWeeklyRoadmapModalContent();
+                        await FirebaseSyncService.autoSyncIfActive();
                         this.showToast(
                             mode === "1WEEK"
-                                ? "초과 체중을 '1주일 집중 감량 플랜'으로 보정하도록 로드맵을 갱신했습니다."
-                                : "초과 체중을 '1달(4주) 분산 감량 플랜'으로 분산 보정하도록 로드맵을 갱신했습니다."
+                                ? `1주일 집중 감량 플랜 반영: 다음 주차 목표 -${(plan.weeklyTargetLossKg + plan.excessWeightKg).toFixed(2)}kg (예상 ${(plan.currentWeightKg - (plan.weeklyTargetLossKg + plan.excessWeightKg)).toFixed(2)}kg)`
+                                : `1달(4주) 분산 감량 플랜 반영: 다음 주차 목표 -${(plan.weeklyTargetLossKg + plan.excessPerWeekMonth).toFixed(2)}kg (예상 ${(plan.currentWeightKg - (plan.weeklyTargetLossKg + plan.excessPerWeekMonth)).toFixed(2)}kg)`
                         );
                     });
                 });
@@ -933,6 +935,17 @@ class GymRatApp {
         const futureRowsEl = document.getElementById("roadmap-future-rows");
         futureRowsEl.innerHTML = plan.futureWeeklyRoadmap
             .map(step => {
+                let lossSubText = "안전 감량폭";
+                let lossSubClass = "roadmap-sub";
+                if (step.additionalLoss > 0) {
+                    if (step.catchupMode === "1WEEK") {
+                        lossSubText = `기본 ${step.baseLoss.toFixed(2)}kg + 1주 초과보정 -${step.additionalLoss.toFixed(2)}kg`;
+                        lossSubClass = "roadmap-sub text-danger font-bold";
+                    } else {
+                        lossSubText = `기본 ${step.baseLoss.toFixed(2)}kg + 4주 분산보정 -${step.additionalLoss.toFixed(2)}kg`;
+                        lossSubClass = "roadmap-sub text-blue font-bold";
+                    }
+                }
                 return `
                 <div class="roadmap-row ${step.isCurrentWeek ? "current-week-highlight" : ""}">
                     <div>
@@ -941,7 +954,7 @@ class GymRatApp {
                     </div>
                     <div>
                         <strong class="text-warning">-${step.weeklyLossKg.toFixed(2)} kg</strong>
-                        <span class="roadmap-sub">안전 감량폭</span>
+                        <span class="${lossSubClass}">${lossSubText}</span>
                     </div>
                     <div>
                         <strong class="text-lime">${step.expectedWeightKg.toFixed(2)} kg</strong>
@@ -1856,21 +1869,23 @@ class GymRatApp {
         const saved = GymRatStorage.getCustomOnboardMeals();
         if (saved && Array.isArray(saved) && saved.length > 0) {
             this.onboardMeals = saved.map(m => this.recalculateMealNutrients(m));
+            this.ensureSupplementsInMeals();
             return;
         }
         this.onboardMeals = [
             {
                 id: "meal_bf",
-                name: "아침 식사",
+                name: "아침 식사 & 보충제",
                 items: [
                     { id: "egg_boiled", quantity: 3 },
                     { id: "apple", quantity: 1 },
-                    { id: "whey_shake", quantity: 1 }
+                    { id: "dymatize_iso100_gourmet_choco", quantity: 1 },
+                    { id: "creatine", quantity: 5 }
                 ],
-                kcal: 470,
+                kcal: 440,
                 pro: 44,
-                carb: 37,
-                fat: 17
+                carb: 31,
+                fat: 15.5
             },
             {
                 id: "meal_lc",
@@ -1909,6 +1924,47 @@ class GymRatApp {
             }
         ];
         this.onboardMeals.forEach(m => this.recalculateMealNutrients(m));
+        GymRatStorage.saveCustomOnboardMeals(this.onboardMeals);
+    }
+
+    /**
+     * 매일 주기적으로 먹는 식단에 크레아틴과 다이마타이즈 ISO 100 웨이 프로틴 파우더가 포함되도록 보장
+     */
+    ensureSupplementsInMeals() {
+        if (!this.onboardMeals || this.onboardMeals.length === 0) return;
+        const allItemIds = new Set();
+        this.onboardMeals.forEach(m => {
+            if (Array.isArray(m.items)) {
+                m.items.forEach(it => allItemIds.add(it.id));
+            }
+        });
+
+        let changed = false;
+        const targetMeal = this.onboardMeals.find(m => /아침/i.test(m.name)) || this.onboardMeals[0];
+        if (targetMeal && Array.isArray(targetMeal.items)) {
+            // 다이마타이즈 ISO 100 고메초콜릿 포함 보장
+            if (!allItemIds.has("dymatize_iso100_gourmet_choco")) {
+                const wheyIdx = targetMeal.items.findIndex(it => it.id === "whey_shake");
+                if (wheyIdx >= 0) {
+                    targetMeal.items[wheyIdx] = { id: "dymatize_iso100_gourmet_choco", quantity: 1 };
+                } else {
+                    targetMeal.items.push({ id: "dymatize_iso100_gourmet_choco", quantity: 1 });
+                }
+                changed = true;
+            }
+
+            // 크레아틴(5g) 포함 보장
+            if (!allItemIds.has("creatine")) {
+                targetMeal.items.push({ id: "creatine", quantity: 5 });
+                changed = true;
+            }
+        }
+
+        if (changed) {
+            this.onboardMeals.forEach(m => this.recalculateMealNutrients(m));
+            GymRatStorage.saveCustomOnboardMeals(this.onboardMeals);
+            FirebaseSyncService.autoSyncIfActive();
+        }
     }
 
     /**
