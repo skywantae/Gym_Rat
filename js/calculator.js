@@ -815,7 +815,7 @@ export class SafeWeightLossCalculator {
 
     /**
      * 사용자의 프로필 및 체성분 기록 배열을 분석하여
-     * 현재 상태, 직전 대비 증감, 현재 주차, 이전 기록, 이후 주차별 예상 몸무게 로드맵을 계산합니다.
+     * 현재 상태, 직전 대비 증감, 현재 주차, 이전 기록, 이후 주차별 및 날짜별 매일매일 목표 몸무게 로드맵을 계산합니다.
      */
     static calculate(profile, records) {
         const sorted = [...records].sort((a, b) => a.recordDate.localeCompare(b.recordDate));
@@ -831,9 +831,10 @@ export class SafeWeightLossCalculator {
             ? Number(latest.bodyFatMassKg)
             : this.round2(currentWeightKg * (currentFatPercent / 100));
         const latestDate = latest ? latest.recordDate : todayStr;
+        const activeDateStr = latestDate > todayStr ? latestDate : todayStr;
 
-        const startDateStr = firstRecord ? firstRecord.recordDate : latestDate;
-        const currentWeekNumber = this.calculateWeekNumber(startDateStr, latestDate);
+        const startDateStr = firstRecord ? firstRecord.recordDate : activeDateStr;
+        const currentWeekNumber = this.calculateWeekNumber(startDateStr, activeDateStr);
 
         const heightM = Math.max(1.2, Number(profile.heightCm) / 100);
         const currentBmi = this.round1(currentWeightKg / (heightM * heightM));
@@ -856,6 +857,12 @@ export class SafeWeightLossCalculator {
 
         const minTargetMuscleKg = Number(profile.minTargetSkeletalMuscleKg);
         const targetWeightKg = Number(profile.targetWeightKg);
+        const initialStartWeightKg = firstRecord
+            ? Number(firstRecord.weightKg)
+            : Number(profile.startWeightKg || currentWeightKg);
+        const profileStartWeightKg = Number(profile.startWeightKg || initialStartWeightKg);
+        const isBulkMode = targetWeightKg > initialStartWeightKg + 0.1;
+
         const baseCalc = this.computeWeeklySafeLossKg(
             currentWeightKg,
             currentFatPercent,
@@ -870,43 +877,199 @@ export class SafeWeightLossCalculator {
         const muscleSafetyBufferKg = baseCalc.muscleSafetyBufferKg;
 
         // 사용자가 온보딩/목표 설정에서 커스텀 도달 일수(customTargetDurationDays)를 지정한 경우 반영
-        const totalDiffFromStart = Math.abs(Number(profile.startWeightKg || currentWeightKg) - targetWeightKg);
+        const totalDiffFromStart = Math.abs(profileStartWeightKg - targetWeightKg);
         if (profile.customTargetDurationDays && Number(profile.customTargetDurationDays) >= 7 && totalDiffFromStart > 0.1) {
             const customDays = Number(profile.customTargetDurationDays);
             weeklyTargetLossKg = this.round2(Math.max(0.20, Math.min(2.20, (totalDiffFromStart / customDays) * 7)));
             weeklySafeLossRatePercent = this.round2((weeklyTargetLossKg / Math.max(35, currentWeightKg)) * 100);
         }
 
-        // 현재 주차(시작일 기준 7일 단위)의 시작 체중 및 이번 주 남은 감량치 계산
-        const currentWeekRange = this.getWeekDateRange(startDateStr, currentWeekNumber);
-        const recordsBeforeThisWeek = sorted.filter(r => r.recordDate < currentWeekRange.weekStartStr);
-        const recordsInThisWeek = sorted.filter(r => r.recordDate >= currentWeekRange.weekStartStr);
+        // 이전 주차 목표 달성 실패 여부 및 초과 체중 판별
+        const catchupMode = profile.missedGoalCatchupMode || "1MONTH";
+        let isPreviousWeekGoalFailed = false;
+        let excessWeightKg = 0;
 
-        let thisWeekStartWeightKg = currentWeightKg;
-        if (recordsBeforeThisWeek.length > 0) {
-            thisWeekStartWeightKg = Number(recordsBeforeThisWeek[recordsBeforeThisWeek.length - 1].weightKg);
-        } else if (recordsInThisWeek.length > 0) {
-            thisWeekStartWeightKg = Number(recordsInThisWeek[0].weightKg);
+        // 주차별 스케줄 및 시뮬레이션 맵 구축 (과거 주차부터 목표 도달 주차까지)
+        const weekSchedule = new Map();
+        let simWeight = profileStartWeightKg;
+        let simFatMass = this.round2(simWeight * (profile.startBodyFatPercent / 100));
+        let activeExcessToCatchup = 0;
+        let wIdx = 1;
+
+        while ((isBulkMode ? simWeight < targetWeightKg - 0.05 : simWeight > targetWeightKg + 0.05) && wIdx <= 52) {
+            const wRange = this.getWeekDateRange(startDateStr, wIdx);
+            const recsInW = sorted.filter(r => r.recordDate >= wRange.weekStartStr && r.recordDate <= wRange.weekEndStr);
+            const simFatPct = this.round1((simFatMass / simWeight) * 100);
+
+            const stepBaseCalc = this.computeWeeklySafeLossKg(
+                simWeight,
+                simFatPct,
+                simFatMass,
+                profile.startSkeletalMuscleKg || currentMuscleKg,
+                minTargetMuscleKg,
+                0
+            );
+
+            let addLoss = 0;
+            if (activeExcessToCatchup > 0) {
+                if (catchupMode === "1WEEK") {
+                    addLoss = activeExcessToCatchup;
+                    activeExcessToCatchup = 0;
+                } else {
+                    addLoss = this.round2(activeExcessToCatchup / 4);
+                }
+            }
+
+            const stepBaseLoss = profile.customTargetDurationDays ? weeklyTargetLossKg : stepBaseCalc.weeklyTargetLossKg;
+            const stepLoss = Math.min(
+                this.round2(stepBaseLoss + addLoss),
+                this.round2(Math.abs(simWeight - targetWeightKg))
+            );
+
+            const weekTargetW = isBulkMode
+                ? this.round2(Math.min(targetWeightKg, simWeight + stepLoss))
+                : this.round2(Math.max(targetWeightKg, simWeight - stepLoss));
+
+            const isWFinished = activeDateStr > wRange.weekEndStr || (wIdx < currentWeekNumber && recsInW.length > 0);
+            const latestRecInW = recsInW.length > 0 ? recsInW[recsInW.length - 1] : null;
+
+            let actualEndWeight = weekTargetW;
+            let isWFailed = false;
+            let weekExcess = 0;
+
+            if (isWFinished) {
+                actualEndWeight = latestRecInW ? Number(latestRecInW.weightKg) : weekTargetW;
+                if (isBulkMode) {
+                    isWFailed = actualEndWeight < weekTargetW - 0.01;
+                    weekExcess = isWFailed ? this.round2(weekTargetW - actualEndWeight) : 0;
+                } else {
+                    isWFailed = actualEndWeight > weekTargetW + 0.01;
+                    weekExcess = isWFailed ? this.round2(actualEndWeight - weekTargetW) : 0;
+                }
+                if (isWFailed) {
+                    activeExcessToCatchup = weekExcess;
+                    if (wIdx === currentWeekNumber - 1 || (wIdx === currentWeekNumber && isWFinished)) {
+                        isPreviousWeekGoalFailed = true;
+                        excessWeightKg = weekExcess;
+                    }
+                }
+            }
+
+            weekSchedule.set(wIdx, {
+                weekNumber: wIdx,
+                weekStartStr: wRange.weekStartStr,
+                weekEndStr: wRange.weekEndStr,
+                startWeightKg: simWeight,
+                weeklyLossKg: stepLoss,
+                targetWeightKg: weekTargetW,
+                dailyLossKg: this.round2(stepLoss / 7),
+                isFinished: isWFinished,
+                isFailed: isWFailed,
+                excessKg: weekExcess,
+                actualEndWeightKg: actualEndWeight,
+                additionalLoss: addLoss,
+                baseLoss: stepBaseLoss,
+                catchupMode
+            });
+
+            simWeight = isWFinished ? actualEndWeight : weekTargetW;
+            simFatMass = this.round2(Math.max(5, simFatMass - stepLoss * 0.9));
+            wIdx++;
         }
 
-        const thisWeekTargetWeightKg = this.round2(
-            Math.max(targetWeightKg, thisWeekStartWeightKg - weeklyTargetLossKg)
+        // 특정 날짜에 대한 일별 목표 체중 및 일일 권장 감량 조회 헬퍼
+        const getDailyTargetForDate = targetDStr => {
+            const wNum = this.calculateWeekNumber(startDateStr, targetDStr);
+            const wInfo = weekSchedule.get(wNum);
+            if (!wInfo) {
+                const dayOffset = 0;
+                return {
+                    dateStr: targetDStr,
+                    weekNumber: wNum,
+                    dayOffset,
+                    dayIndexInWeek: 1,
+                    dailyTargetWeightKg: targetWeightKg,
+                    dailyLossKg: this.round2(weeklyTargetLossKg / 7),
+                    weekStartWeightKg: currentWeightKg,
+                    weekTargetWeightKg: targetWeightKg,
+                    isWeekEnd: false
+                };
+            }
+            const dStart = parseLocalDate(wInfo.weekStartStr);
+            const dCur = parseLocalDate(targetDStr);
+            const dayOffset = Math.max(0, Math.min(6, Math.floor((dCur.getTime() - dStart.getTime()) / 86400000)));
+
+            let dailyTargetW = isBulkMode
+                ? this.round2(wInfo.startWeightKg + wInfo.dailyLossKg * (dayOffset + 1))
+                : this.round2(wInfo.startWeightKg - wInfo.dailyLossKg * (dayOffset + 1));
+
+            if (dayOffset === 6) {
+                dailyTargetW = wInfo.targetWeightKg;
+            }
+
+            return {
+                dateStr: targetDStr,
+                weekNumber: wNum,
+                dayOffset,
+                dayIndexInWeek: dayOffset + 1,
+                dailyTargetWeightKg: dailyTargetW,
+                dailyLossKg: wInfo.dailyLossKg,
+                weekStartWeightKg: wInfo.startWeightKg,
+                weekTargetWeightKg: wInfo.targetWeightKg,
+                isWeekEnd: dayOffset === 6
+            };
+        };
+
+        // 현재 주차 정보 조회
+        const currentWeekInfo = weekSchedule.get(currentWeekNumber) || {
+            weekNumber: currentWeekNumber,
+            weekStartStr: this.getWeekDateRange(startDateStr, currentWeekNumber).weekStartStr,
+            weekEndStr: this.getWeekDateRange(startDateStr, currentWeekNumber).weekEndStr,
+            startWeightKg: currentWeightKg,
+            weeklyLossKg: weeklyTargetLossKg,
+            targetWeightKg: this.round2(isBulkMode ? currentWeightKg + weeklyTargetLossKg : currentWeightKg - weeklyTargetLossKg),
+            dailyLossKg: this.round2(weeklyTargetLossKg / 7),
+            isFinished: false,
+            isFailed: false,
+            excessKg: 0,
+            additionalLoss: 0,
+            baseLoss: weeklyTargetLossKg
+        };
+
+        const thisWeekStartWeightKg = currentWeekInfo.startWeightKg;
+        const thisWeekTargetWeightKg = currentWeekInfo.targetWeightKg;
+        const thisWeekLossKg = currentWeekInfo.weeklyLossKg;
+        const thisWeekDailyLossKg = currentWeekInfo.dailyLossKg;
+
+        const alreadyLostThisWeekKg = this.round2(
+            isBulkMode ? Math.max(0, currentWeightKg - thisWeekStartWeightKg) : Math.max(0, thisWeekStartWeightKg - currentWeightKg)
         );
-        const alreadyLostThisWeekKg = this.round2(Math.max(0, thisWeekStartWeightKg - currentWeightKg));
         const remainingToLoseThisWeekKg = this.round2(
-            Math.max(0, weeklyTargetLossKg - alreadyLostThisWeekKg)
+            Math.max(0, thisWeekLossKg - alreadyLostThisWeekKg)
         );
-        const weeklyProgressRatio = weeklyTargetLossKg > 0
-            ? Math.min(1, Math.max(0, alreadyLostThisWeekKg / weeklyTargetLossKg))
+        const weeklyProgressRatio = thisWeekLossKg > 0
+            ? Math.min(1, Math.max(0, alreadyLostThisWeekKg / thisWeekLossKg))
             : 1;
 
-        const initialStartWeightKg = firstRecord
-            ? Number(firstRecord.weightKg)
-            : Number(profile.startWeightKg || currentWeightKg);
-        const profileStartWeightKg = Number(profile.startWeightKg || initialStartWeightKg);
-        const isBulkMode = targetWeightKg > initialStartWeightKg + 0.1;
+        // 오늘(todayStr)에 대한 일별 목표 수치 계산
+        const todayDailyInfo = getDailyTargetForDate(todayStr);
+        const todayTargetWeightKg = todayDailyInfo.dailyTargetWeightKg;
+        const todayDailyLossKg = todayDailyInfo.dailyLossKg;
+        const todayDayIndexInWeek = todayDailyInfo.dayIndexInWeek;
+        const todayRecord = sorted.find(r => r.recordDate === todayStr) || null;
+        const todayEffectiveWeightKg = todayRecord ? Number(todayRecord.weightKg) : currentWeightKg;
 
-        // 이전 기록 리스트 (주차, 1주차 시작일 여부, 직전 대비 변화량, 해당 주차 목표 몸무게 및 목표 달성 성공 여부 포함)
+        let isTodayGoalAchieved = false;
+        let todayRemainingKg = 0;
+        if (isBulkMode) {
+            isTodayGoalAchieved = todayEffectiveWeightKg >= todayTargetWeightKg - 0.01;
+            todayRemainingKg = this.round2(todayTargetWeightKg - todayEffectiveWeightKg);
+        } else {
+            isTodayGoalAchieved = todayEffectiveWeightKg <= todayTargetWeightKg + 0.01;
+            todayRemainingKg = this.round2(todayEffectiveWeightKg - todayTargetWeightKg);
+        }
+
+        // 이전 기록 리스트 (일별 목표 몸무게 및 당일 일별 목표 달성 여부 포함)
         const pastRecordsWithMeta = sorted.map((rec, idx) => {
             const prevRec = idx > 0 ? sorted[idx - 1] : null;
             const w = Number(rec.weightKg);
@@ -914,59 +1077,29 @@ export class SafeWeightLossCalculator {
             const fp = Number(rec.bodyFatPercentage);
             const fm = rec.bodyFatMassKg != null ? Number(rec.bodyFatMassKg) : this.round2(w * (fp / 100));
             const deltaW = prevRec ? this.round2(w - Number(prevRec.weightKg)) : 0;
-            const weekNum = this.calculateWeekNumber(startDateStr, rec.recordDate);
-            const weekRange = this.getWeekDateRange(startDateStr, weekNum);
-            const recordsBeforeWeek = sorted.filter(r => r.recordDate < weekRange.weekStartStr);
-            const recordsInThisWeekSoFar = sorted.filter(
-                (r, rIdx) => rIdx <= idx && r.recordDate >= weekRange.weekStartStr && r.recordDate <= weekRange.weekEndStr
-            );
 
-            let weekStartWeightKg = initialStartWeightKg;
-            if (recordsBeforeWeek.length > 0) {
-                weekStartWeightKg = Number(recordsBeforeWeek[recordsBeforeWeek.length - 1].weightKg);
-            } else if (recordsInThisWeekSoFar.length > 0) {
-                weekStartWeightKg = Number(recordsInThisWeekSoFar[0].weightKg);
-            }
+            const dailyInfo = getDailyTargetForDate(rec.recordDate);
+            const dailyTargetW = dailyInfo ? dailyInfo.dailyTargetWeightKg : w;
+            const dailyLoss = dailyInfo ? dailyInfo.dailyLossKg : 0;
+            const dayIdxInWeek = dailyInfo ? dailyInfo.dayIndexInWeek : 1;
+            const weekNum = dailyInfo ? dailyInfo.weekNumber : this.calculateWeekNumber(startDateStr, rec.recordDate);
 
-            let weekTargetWeightKg = targetWeightKg;
-            let isGoalSuccess = false;
+            let isDailySuccess = false;
+            let dailyDiff = 0;
 
-            if (isBulkMode) {
-                const targetFromWeekStart = this.round2(Math.min(targetWeightKg, weekStartWeightKg + weeklyTargetLossKg));
-                const targetFromCumulative = this.round2(Math.min(targetWeightKg, initialStartWeightKg + weeklyTargetLossKg * weekNum));
-                weekTargetWeightKg = Math.min(targetFromWeekStart, targetFromCumulative);
-                if (idx === 0) {
-                    const gainedFromProfileStart = this.round2(w - profileStartWeightKg);
-                    isGoalSuccess = w >= targetWeightKg - 0.01 || gainedFromProfileStart >= weeklyTargetLossKg - 0.01;
-                } else {
-                    const gainedFromWeekStart = this.round2(w - weekStartWeightKg);
-                    const gainedFromPrev = prevRec ? this.round2(w - Number(prevRec.weightKg)) : 0;
-                    isGoalSuccess =
-                        w >= weekTargetWeightKg - 0.01 ||
-                        gainedFromWeekStart >= weeklyTargetLossKg - 0.01 ||
-                        gainedFromPrev >= weeklyTargetLossKg - 0.01 ||
-                        w >= targetWeightKg - 0.01;
-                }
+            if (idx === 0) {
+                isDailySuccess = true;
+                dailyDiff = 0;
+            } else if (isBulkMode) {
+                isDailySuccess = w >= dailyTargetW - 0.01;
+                dailyDiff = this.round2(w - dailyTargetW);
             } else {
-                const targetFromWeekStart = this.round2(Math.max(targetWeightKg, weekStartWeightKg - weeklyTargetLossKg));
-                const targetFromCumulative = this.round2(Math.max(targetWeightKg, initialStartWeightKg - weeklyTargetLossKg * weekNum));
-                weekTargetWeightKg = Math.max(targetFromWeekStart, targetFromCumulative);
-                if (idx === 0) {
-                    const lostFromProfileStart = this.round2(profileStartWeightKg - w);
-                    isGoalSuccess = w <= targetWeightKg + 0.01 || lostFromProfileStart >= weeklyTargetLossKg - 0.01;
-                } else {
-                    const lostFromWeekStart = this.round2(weekStartWeightKg - w);
-                    const lostFromPrev = prevRec ? this.round2(Number(prevRec.weightKg) - w) : 0;
-                    isGoalSuccess =
-                        w <= weekTargetWeightKg + 0.01 ||
-                        lostFromWeekStart >= weeklyTargetLossKg - 0.01 ||
-                        lostFromPrev >= weeklyTargetLossKg - 0.01 ||
-                        w <= targetWeightKg + 0.01;
-                }
+                isDailySuccess = w <= dailyTargetW + 0.01;
+                dailyDiff = this.round2(w - dailyTargetW);
             }
 
-            const isGoalFailed = !isGoalSuccess && idx > 0;
-            const excessKg = isGoalFailed ? this.round2(Math.max(0, w - weekTargetWeightKg)) : 0;
+            const isGoalFailed = !isDailySuccess && idx > 0;
+            const excessKg = isGoalFailed && dailyDiff > 0 ? dailyDiff : 0;
 
             return {
                 ...rec,
@@ -976,108 +1109,93 @@ export class SafeWeightLossCalculator {
                 bodyFatPercentage: fp,
                 deltaWeightKg: deltaW,
                 weekNumber: weekNum,
+                dayIndexInWeek: dayIdxInWeek,
                 isStartRecord: idx === 0,
-                weekStartWeightKg,
-                weekTargetWeightKg,
-                isGoalSuccess,
+                dailyTargetWeightKg: dailyTargetW,
+                dailyLossKg: dailyLoss,
+                weekStartWeightKg: dailyInfo ? dailyInfo.weekStartWeightKg : w,
+                weekTargetWeightKg: dailyInfo ? dailyInfo.weekTargetWeightKg : dailyTargetW,
+                isGoalSuccess: isDailySuccess,
                 isGoalFailed,
-                excessKg
+                excessKg,
+                dailyDiffKg: dailyDiff
             };
         }).reverse();
 
-        // 현재 주차의 종료일 도달 여부 및 목표 달성/실패 판별 (오늘 날짜 및 최근 기록 날짜 기준)
-        const activeDateStr = latestDate > todayStr ? latestDate : todayStr;
-        const diffDays = Math.floor((parseLocalDate(activeDateStr).getTime() - parseLocalDate(startDateStr).getTime()) / (1000 * 60 * 60 * 24));
-        const daysIntoCurrentWeek = diffDays - (currentWeekNumber - 1) * 7;
-        const isCurrentWeekFinished = activeDateStr >= currentWeekRange.weekEndStr || daysIntoCurrentWeek >= 6 || sorted.length >= 7;
-
-        const isThisWeekGoalSuccess =
-            sorted.length > 0 &&
-            (pastRecordsWithMeta.some(r => r.weekNumber === currentWeekNumber && r.isGoalSuccess) ||
-                (sorted.length > 1 && remainingToLoseThisWeekKg <= 0.01));
-
-        let isThisWeekGoalFailed = false;
-        let excessWeightKg = 0;
-        if (!isThisWeekGoalSuccess && isCurrentWeekFinished && currentWeightKg > thisWeekTargetWeightKg + 0.01) {
-            isThisWeekGoalFailed = true;
-            excessWeightKg = this.round2(currentWeightKg - thisWeekTargetWeightKg);
-        }
-
-        // 초과 몸무게 만회 코스 (1WEEK: 1주일 집중 감량 / 1MONTH: 1달 4주 분할 감량)
-        const catchupMode = profile.missedGoalCatchupMode || "1MONTH";
+        // 1주차 목표 미달성 시 만회 코스 수치
+        const isThisWeekGoalFailed = isPreviousWeekGoalFailed;
         const excessPerWeekMonth = this.round2(excessWeightKg / 4);
         const catchupKcal1Week = Math.round((excessWeightKg * 7700) / 7);
         const catchupKcal1Month = Math.round((excessWeightKg * 7700) / 28);
+        const isThisWeekGoalSuccess = sorted.length > 0 && isTodayGoalAchieved;
 
-        // 이후 주차별 예상 몸무게 시뮬레이션 로드맵 생성 (1주차 시작일 기준 7일 단위)
+        // 이후 주차별 예상 로드맵 목록 생성
         const futureWeeklyRoadmap = [];
-        let simWeight = currentWeightKg;
-        let simFatMass = currentFatMassKg;
-        let weekOffset = 1;
+        for (let [wNum, wInfo] of weekSchedule.entries()) {
+            if (wNum >= currentWeekNumber) {
+                const isCur = wNum === currentWeekNumber;
+                futureWeeklyRoadmap.push({
+                    weekNumber: wNum,
+                    isCurrentWeek: isCur,
+                    dateRangeText: `${wInfo.weekStartStr.slice(5)} ~ ${wInfo.weekEndStr.slice(5)}`,
+                    weeklyLossKg: wInfo.weeklyLossKg,
+                    expectedWeightKg: wInfo.targetWeightKg,
+                    expectedFatPercent: this.round1(
+                        Math.max(10, currentFatPercent - (initialStartWeightKg - wInfo.targetWeightKg) * 0.45)
+                    ),
+                    isFailed: wInfo.isFailed,
+                    excessWeightKg: wInfo.excessKg,
+                    additionalLoss: wInfo.additionalLoss,
+                    baseLoss: wInfo.baseLoss,
+                    catchupMode
+                });
+            }
+        }
 
-        // 먼저 현재 진행 중인 주차의 종료 행 추가
-        const thisWeekEndWeight = this.round2(Math.max(targetWeightKg, currentWeightKg - remainingToLoseThisWeekKg));
-        const thisWeekEndFatMass = this.round2(Math.max(5, simFatMass - remainingToLoseThisWeekKg * 0.9));
-        futureWeeklyRoadmap.push({
-            weekNumber: currentWeekNumber,
-            isCurrentWeek: true,
-            dateRangeText: `${currentWeekRange.weekStartStr.slice(5)} ~ ${currentWeekRange.weekEndStr.slice(5)}`,
-            weeklyLossKg: remainingToLoseThisWeekKg,
-            expectedWeightKg: isThisWeekGoalFailed ? currentWeightKg : thisWeekEndWeight,
-            expectedFatPercent: this.round1((thisWeekEndFatMass / (isThisWeekGoalFailed ? currentWeightKg : thisWeekEndWeight)) * 100),
-            isFailed: isThisWeekGoalFailed,
-            excessWeightKg
-        });
+        // 오늘부터 최종 목표 체중까지 매일매일 날짜별 목표 로드맵 생성
+        const futureDailyRoadmap = [];
+        const dayNames = ["일", "월", "화", "수", "목", "금", "토"];
+        const startToday = parseLocalDate(todayStr);
+        const currDate = new Date(startToday);
+        let daysAhead = 0;
 
-        simWeight = isThisWeekGoalFailed ? currentWeightKg : thisWeekEndWeight;
-        simFatMass = thisWeekEndFatMass;
+        while (daysAhead < 365) {
+            const dStr = getLocalDateString(currDate);
+            const dayInfo = getDailyTargetForDate(dStr);
+            if (!dayInfo) break;
+            const dayOfWeek = dayNames[currDate.getDay()];
+            const isToday = dStr === todayStr;
 
-        while (simWeight > targetWeightKg + 0.05 && weekOffset <= 52) {
-            const simFatPct = this.round1((simFatMass / simWeight) * 100);
-            const stepCalc = this.computeWeeklySafeLossKg(
-                simWeight,
-                simFatPct,
-                simFatMass,
-                currentMuscleKg,
-                minTargetMuscleKg,
-                0
-            );
-
-            // 만회 코스 반영: 1WEEK면 다음 1주에 초과분 전액 반영, 1MONTH면 향후 4주간 분할 반영
-            let additionalLoss = 0;
-            if (isThisWeekGoalFailed && excessWeightKg > 0) {
-                if (catchupMode === "1WEEK" && weekOffset === 1) {
-                    additionalLoss = excessWeightKg;
-                } else if (catchupMode === "1MONTH" && weekOffset <= 4) {
-                    additionalLoss = excessPerWeekMonth;
-                }
+            let note = isToday ? "오늘 목표" : "일일 권장 감량";
+            if (dayInfo.isWeekEnd) {
+                note = `${dayInfo.weekNumber}주차 완료 목표`;
+            } else if (dayInfo.weekNumber === currentWeekNumber && currentWeekInfo.additionalLoss > 0) {
+                note = catchupMode === "1WEEK" ? "1주 집중 보정" : "4주 분산 보정";
             }
 
-            const baseStepLoss = profile.customTargetDurationDays ? weeklyTargetLossKg : stepCalc.weeklyTargetLossKg;
-            const stepLoss = Math.min(
-                this.round2(baseStepLoss + additionalLoss),
-                this.round2(simWeight - targetWeightKg)
-            );
-            simWeight = this.round2(simWeight - stepLoss);
-            simFatMass = this.round2(Math.max(5, simFatMass - stepLoss * 0.9));
-            const nextFatPct = this.round1((simFatMass / simWeight) * 100);
-
-            const nextWeekNum = currentWeekNumber + weekOffset;
-            const nextRange = this.getWeekDateRange(startDateStr, nextWeekNum);
-
-            futureWeeklyRoadmap.push({
-                weekNumber: nextWeekNum,
-                isCurrentWeek: false,
-                dateRangeText: `${nextRange.weekStartStr.slice(5)} ~ ${nextRange.weekEndStr.slice(5)}`,
-                weeklyLossKg: stepLoss,
-                expectedWeightKg: simWeight,
-                expectedFatPercent: nextFatPct,
-                additionalLoss,
-                baseLoss: baseStepLoss,
-                catchupMode
+            futureDailyRoadmap.push({
+                dateStr: dStr,
+                dayOfWeek,
+                dateText: `${dStr.slice(5).replace("-", "/")} (${dayOfWeek})`,
+                weekNumber: dayInfo.weekNumber,
+                dayIndexInWeek: dayInfo.dayIndexInWeek,
+                weekText: `${dayInfo.weekNumber}주차 ${dayInfo.dayIndexInWeek}일`,
+                dailyLossKg: dayInfo.dailyLossKg,
+                expectedWeightKg: dayInfo.dailyTargetWeightKg,
+                expectedFatPercent: this.round1(
+                    Math.max(10, currentFatPercent - (initialStartWeightKg - dayInfo.dailyTargetWeightKg) * 0.45)
+                ),
+                isToday,
+                isWeekEnd: dayInfo.isWeekEnd,
+                weekTargetWeightKg: dayInfo.weekTargetWeightKg,
+                note
             });
 
-            weekOffset++;
+            if (isBulkMode ? dayInfo.dailyTargetWeightKg >= targetWeightKg - 0.05 : dayInfo.dailyTargetWeightKg <= targetWeightKg + 0.05) {
+                break;
+            }
+            currDate.setDate(currDate.getDate() + 1);
+            daysAhead++;
         }
 
         const totalRemainingWeightKg = this.round2(Math.max(0, currentWeightKg - targetWeightKg));
@@ -1174,6 +1292,15 @@ export class SafeWeightLossCalculator {
             scienceCoachingDetail,
             pastRecordsWithMeta,
             futureWeeklyRoadmap,
+            futureDailyRoadmap,
+            todayDateStr: todayStr,
+            todayTargetWeightKg,
+            todayDailyLossKg,
+            todayDayIndexInWeek,
+            todayRemainingKg,
+            isTodayGoalAchieved,
+            todayRecord,
+            getDailyTargetForDate,
             missedDates
         };
     }

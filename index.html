@@ -483,14 +483,14 @@
                         <span class="box-hint">터치하여 오늘 체성분 입력</span>
                     </div>
 
-                    <div id="box-weekly-target" class="atflee-box-white" title="클릭하여 주차별 이전 기록 및 이후 예상 몸무게 보기">
-                        <span class="box-caption-dark">이번 주 목표까지</span>
+                    <div id="box-weekly-target" class="atflee-box-white" title="클릭하여 날짜별 매일매일 목표 체중 및 로드맵 보기">
+                        <span class="box-caption-dark">오늘 목표까지</span>
                         <div>
-                            <span id="atflee-weekly-remaining" class="box-target-number">- 0.58</span>
+                            <span id="atflee-weekly-remaining" class="box-target-number">- 0.11</span>
                             <span class="box-unit-orange">kg</span>
                         </div>
-                        <span id="atflee-weekly-sub1" class="box-sub1">주간 권장 -0.78kg</span>
-                        <span id="atflee-weekly-sub2" class="box-sub2">터치하여 주차별 기록 및 이후 몸무게 보기</span>
+                        <span id="atflee-weekly-sub1" class="box-sub1">오늘 목표 103.69kg (일일 권장 -0.11kg)</span>
+                        <span id="atflee-weekly-sub2" class="box-sub2">터치하여 날짜별 매일매일 목표 체중 및 로드맵 보기</span>
                     </div>
                 </div>
 
@@ -863,28 +863,35 @@
             <!-- 목표 미달성 시 만회 플랜 설정 영역 -->
             <div id="roadmap-catchup-container"></div>
 
-            <!-- 탭 전환: [이전 측정 기록] | [이후 주차별 예상 몸무게] -->
+            <!-- 탭 전환: [이전 기록 및 일별 현황] | [이후 감량 로드맵] -->
             <div class="sub-tab-bar" style="margin-top: 12px;">
-                <button type="button" id="tab-btn-roadmap-past" class="sub-tab-btn active">이전 측정 기록</button>
-                <button type="button" id="tab-btn-roadmap-future" class="sub-tab-btn">이후 주차별 예상 몸무게</button>
+                <button type="button" id="tab-btn-roadmap-past" class="sub-tab-btn active">이전 기록 및 일별 현황</button>
+                <button type="button" id="tab-btn-roadmap-future" class="sub-tab-btn">이후 감량 로드맵</button>
             </div>
 
-            <!-- 패널 A: 이전 측정 기록 리스트 -->
+            <!-- 패널 A: 이전 기록 및 일별 현황 리스트 -->
             <div id="panel-roadmap-past" class="roadmap-scroll-area">
                 <div class="roadmap-table-head">
                     <span>주차 / 날짜</span>
-                    <span>몸무게 (변화)</span>
+                    <span>몸무게 / 일별 목표</span>
                     <span>골격근 / 체지방</span>
                 </div>
                 <div id="roadmap-past-rows"></div>
             </div>
 
-            <!-- 패널 B: 이후 주차별 예상 몸무게 시뮬레이션 -->
+            <!-- 패널 B: 이후 감량 로드맵 (매일매일 일별 보기 / 주차별 요약 보기 토글) -->
             <div id="panel-roadmap-future" class="roadmap-scroll-area hidden">
-                <div class="roadmap-table-head">
-                    <span>주차 (기간)</span>
-                    <span>주간 목표 감량</span>
-                    <span>예상 도달 몸무게</span>
+                <div class="roadmap-view-mode-bar">
+                    <span class="roadmap-view-mode-label">보기 방식:</span>
+                    <div class="btn-group-sm">
+                        <button type="button" id="btn-future-view-daily" class="btn-roadmap-toggle active">매일매일 일별 보기</button>
+                        <button type="button" id="btn-future-view-weekly" class="btn-roadmap-toggle">주차별 요약 보기</button>
+                    </div>
+                </div>
+                <div id="roadmap-future-table-head" class="roadmap-table-head">
+                    <span>날짜 (요일/주차)</span>
+                    <span>일일 권장 감량</span>
+                    <span>해당일 목표 체중</span>
                 </div>
                 <div id="roadmap-future-rows"></div>
             </div>
@@ -965,6 +972,6 @@
     <!-- 토스트 알림 -->
     <div id="toast-banner" class="toast-banner"></div>
 
-    <script type="module" src="js/app.js?v=20261026_4"></script>
+    <script type="module" src="js/app.js?v=20261027_2"></script>
 </body>
 </html>

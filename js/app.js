@@ -24,6 +24,7 @@ class GymRatApp {
         this.activeBottomNav = "dashboard"; // "dashboard" | "graph"
         this.atfleeSubTab = "summary";      // "summary" | "science"
         this.roadmapSubTab = "past";        // "past" | "future"
+        this.futureRoadmapViewMode = "daily"; // "daily" | "weekly"
         this.chartPeriodDays = 30;          // 7 | 30 | 90 | 180 | null
         this.chartMetricTab = "OVERLAY";    // "OVERLAY" | "WEIGHT_ONLY" | "MUSCLE_ONLY" | "BODY_FAT_ONLY"
         this.selectedChartPointIndex = null;
@@ -119,7 +120,7 @@ class GymRatApp {
             this.openWeeklyRoadmapModal();
         });
 
-        // 로드맵 모달 내 탭 전환 ([이전 측정 기록] | [이후 주차별 예상 몸무게])
+        // 로드맵 모달 내 탭 전환 ([이전 기록 및 일별 현황] | [이후 감량 로드맵])
         document.getElementById("tab-btn-roadmap-past").addEventListener("click", () => {
             this.roadmapSubTab = "past";
             this.renderWeeklyRoadmapModalContent();
@@ -128,6 +129,24 @@ class GymRatApp {
             this.roadmapSubTab = "future";
             this.renderWeeklyRoadmapModalContent();
         });
+
+        // 이후 로드맵 보기 모드 토글 ([매일매일 일별 보기] | [주차별 요약 보기])
+        const btnFutureDaily = document.getElementById("btn-future-view-daily");
+        const btnFutureWeekly = document.getElementById("btn-future-view-weekly");
+        if (btnFutureDaily && btnFutureWeekly) {
+            btnFutureDaily.addEventListener("click", () => {
+                this.futureRoadmapViewMode = "daily";
+                btnFutureDaily.classList.add("active");
+                btnFutureWeekly.classList.remove("active");
+                this.renderWeeklyRoadmapModalContent();
+            });
+            btnFutureWeekly.addEventListener("click", () => {
+                this.futureRoadmapViewMode = "weekly";
+                btnFutureWeekly.classList.add("active");
+                btnFutureDaily.classList.remove("active");
+                this.renderWeeklyRoadmapModalContent();
+            });
+        }
 
         // 로드맵 모달에서 목표 수치 변경 모달로 이동
         document.querySelectorAll(".js-open-goal-from-roadmap").forEach(btn => {
@@ -408,7 +427,7 @@ class GymRatApp {
             }
         }
 
-        // 1. 앳플리 스타일 상단 몸무게 & 이번 주 감량 목표 박스 업데이트
+        // 1. 앳플리 스타일 상단 몸무게 & 오늘 일별 목표 감량 박스 업데이트
         const hasRecords = weightRecords.length > 0;
         document.getElementById("latest-record-date").textContent = hasRecords
             ? `최근 기록일: ${plan.latestDate} (1주차 시작일: ${plan.startDateStr} · 총 ${weightRecords.length}회 기록)`
@@ -418,44 +437,47 @@ class GymRatApp {
             weekPill.textContent = "1주차 시작 대기";
             weekPill.className = "week-status-pill";
         } else if (plan.isThisWeekGoalFailed) {
-            weekPill.textContent = `${plan.currentWeekNumber}주차 목표 실패 (초과 +${plan.excessWeightKg.toFixed(2)}kg)`;
+            const catchupLabel = plan.catchupMode === "1WEEK" ? "1주 집중 보정" : "4주 분산 보정";
+            weekPill.textContent = `${plan.currentWeekNumber}주차 진행 중 (${catchupLabel})`;
             weekPill.className = "week-status-pill failure";
-        } else if (plan.isThisWeekGoalSuccess) {
-            weekPill.textContent = `${plan.currentWeekNumber}주차 목표 성공`;
+        } else if (plan.isTodayGoalAchieved) {
+            weekPill.textContent = `${plan.currentWeekNumber}주차 ${plan.todayDayIndexInWeek}일차 (오늘 목표 달성)`;
             weekPill.className = "week-status-pill success";
         } else if (plan.latestDate === plan.startDateStr) {
             weekPill.textContent = "1주차 (시작일)";
             weekPill.className = "week-status-pill";
         } else {
-            weekPill.textContent = `${plan.currentWeekNumber}주차 진행 중`;
+            weekPill.textContent = `${plan.currentWeekNumber}주차 ${plan.todayDayIndexInWeek}일차 진행 중`;
             weekPill.className = "week-status-pill";
         }
 
         document.getElementById("atflee-current-weight").textContent = plan.currentWeightKg.toFixed(2);
 
         const remainingEl = document.getElementById("atflee-weekly-remaining");
-        if (plan.isThisWeekGoalFailed) {
-            remainingEl.textContent = `실패 (+${plan.excessWeightKg.toFixed(2)})`;
-            remainingEl.className = "metric-value-huge text-danger";
-        } else if (plan.isThisWeekGoalSuccess) {
-            remainingEl.textContent = "성공 (0.00)";
-            remainingEl.className = "metric-value-huge text-lime";
-        } else {
-            remainingEl.textContent = `- ${plan.remainingToLoseThisWeekKg.toFixed(2)}`;
-            remainingEl.className = "metric-value-huge";
-        }
-
         const sub1El = document.getElementById("atflee-weekly-sub1");
-        if (plan.isThisWeekGoalFailed) {
-            const catchupLabel = (plan.catchupMode === "1WEEK") ? "1주일 집중 보정" : "1달(4주) 분산 보정";
-            sub1El.textContent = `${plan.currentWeekNumber}주차 목표(${plan.thisWeekTargetWeightKg.toFixed(2)}kg) 미달성 (+${plan.excessWeightKg.toFixed(2)}kg 초과 · ${catchupLabel})`;
-        } else if (plan.isThisWeekGoalSuccess) {
-            sub1El.textContent = `${plan.currentWeekNumber}주차 목표(${plan.thisWeekTargetWeightKg.toFixed(2)}kg) 도달 성공`;
+        if (!hasRecords) {
+            remainingEl.textContent = `- ${plan.todayDailyLossKg.toFixed(2)}`;
+            remainingEl.className = "box-target-number";
+            sub1El.textContent = `첫 체성분을 입력하여 1일차 시작`;
+        } else if (plan.isTodayGoalAchieved) {
+            remainingEl.textContent = "달성 (0.00)";
+            remainingEl.className = "box-target-number text-lime";
+            if (plan.todayRecord) {
+                sub1El.textContent = `오늘 목표(${plan.todayTargetWeightKg.toFixed(2)}kg) 달성 (측정 ${Number(plan.todayRecord.weightKg).toFixed(2)}kg)`;
+            } else {
+                sub1El.textContent = `오늘 목표(${plan.todayTargetWeightKg.toFixed(2)}kg) 이미 도달 상태`;
+            }
         } else {
-            sub1El.textContent = `${plan.currentWeekNumber}주차 권장 -${plan.weeklyTargetLossKg.toFixed(2)}kg (목표 ${plan.thisWeekTargetWeightKg.toFixed(2)}kg)`;
+            remainingEl.textContent = `- ${Math.abs(plan.todayRemainingKg).toFixed(2)}`;
+            remainingEl.className = "box-target-number";
+            if (plan.todayRecord) {
+                sub1El.textContent = `오늘 목표 ${plan.todayTargetWeightKg.toFixed(2)}kg (측정 ${Number(plan.todayRecord.weightKg).toFixed(2)}kg · -${plan.todayRemainingKg.toFixed(2)}kg 필요)`;
+            } else {
+                sub1El.textContent = `오늘 목표: ${plan.todayTargetWeightKg.toFixed(2)}kg (일일 권장 -${plan.todayDailyLossKg.toFixed(2)}kg)`;
+            }
         }
         document.getElementById("atflee-weekly-sub2").textContent =
-            `터치하여 ${plan.currentWeekNumber}주차 이전 기록 및 이후 몸무게 보기`;
+            "터치하여 날짜별 매일매일 목표 체중 및 로드맵 보기";
 
         // 2. 어제 대비 3열
         const formatSigned = val => (val > 0 ? `+${val.toFixed(2)}` : val.toFixed(2));
@@ -693,43 +715,47 @@ class GymRatApp {
 
         document.getElementById("roadmap-modal-title").textContent =
             records.length === 0
-                ? "1주차 감량 로드맵 (기록 대기 중)"
+                ? "감량 로드맵 (기록 대기 중)"
                 : plan.latestDate === plan.startDateStr
-                    ? "현재 1주차 (시작일) 감량 현황 및 로드맵"
-                    : `현재 ${plan.currentWeekNumber}주차 감량 현황 및 로드맵`;
+                    ? "현재 1주차 (시작일) 감량 현황 및 날짜별 로드맵"
+                    : `현재 ${plan.currentWeekNumber}주차 감량 현황 및 날짜별 로드맵`;
         document.getElementById("roadmap-modal-subtitle").textContent =
             records.length === 0
-                ? `첫 체성분 기록을 등록하면 해당 날짜가 1주차 시작일로 지정되며, 목표(${plan.targetWeightKg.toFixed(1)}kg)까지 주차별 로드맵이 생성됩니다.`
-                : `1주차 시작일(${plan.startDateStr}) 기준 측정 기록(${records.length}회)과 이후 목표(${plan.targetWeightKg.toFixed(1)}kg) 도달 예상 몸무게입니다.`;
+                ? `첫 체성분 기록을 등록하면 해당 날짜가 1주차 시작일로 지정되며, 목표(${plan.targetWeightKg.toFixed(1)}kg)까지 날짜별 매일매일 목표 체중 및 주차별 로드맵이 생성됩니다.`
+                : `1주차 시작일(${plan.startDateStr}) 기준 날짜별 측정 기록(${records.length}회)과 이후 목표(${plan.targetWeightKg.toFixed(1)}kg) 도달까지 매일매일 일별 목표 체중입니다.`;
 
         let weekStatusBadge = "";
-        if (plan.isThisWeekGoalSuccess) {
-            weekStatusBadge = '<span class="roadmap-goal-badge success">성공</span>';
+        if (plan.isTodayGoalAchieved) {
+            weekStatusBadge = '<span class="roadmap-goal-badge success">오늘 목표 달성</span>';
         } else if (plan.isThisWeekGoalFailed) {
-            weekStatusBadge = '<span class="roadmap-goal-badge failure">실패</span>';
+            weekStatusBadge = '<span class="roadmap-goal-badge failure">보정 감량 진행</span>';
         }
 
         const bannerEl = document.getElementById("roadmap-current-week-banner");
+        const todayGoalSign = plan.isTodayGoalAchieved
+            ? "달성 (0.00)"
+            : `-${Math.abs(plan.todayRemainingKg).toFixed(2)}kg`;
+
         bannerEl.innerHTML = `
             <div style="display: flex; justify-content: space-between; align-items: center;">
                 <div style="display: flex; align-items: center; gap: 6px;">
-                    <strong class="${plan.isThisWeekGoalFailed ? "text-danger" : "text-lime"}" style="font-size: 13.5px;">현재 ${plan.currentWeekNumber}주차 목표 요약</strong>
+                    <strong class="${plan.isTodayGoalAchieved ? "text-lime" : "text-blue"}" style="font-size: 13.5px;">오늘 일별 목표 및 ${plan.currentWeekNumber}주차 현황</strong>
                     ${weekStatusBadge}
                 </div>
-                <span style="font-size: 11.5px; color: var(--text-secondary);">주간 권장 감량: -${plan.weeklyTargetLossKg.toFixed(2)}kg</span>
+                <span style="font-size: 11.5px; color: var(--text-secondary);">일일 권장 감량: -${plan.todayDailyLossKg.toFixed(2)}kg (주간 -${plan.weeklyTargetLossKg.toFixed(2)}kg)</span>
             </div>
             <div class="roadmap-summary-grid">
                 <div>
-                    <span>${plan.currentWeekNumber}주차 시작</span>
-                    <strong>${plan.thisWeekStartWeightKg.toFixed(2)}kg</strong>
+                    <span>오늘(${plan.todayDateStr.slice(5)}) 일별 목표</span>
+                    <strong class="text-lime">${plan.todayTargetWeightKg.toFixed(2)}kg</strong>
                 </div>
                 <div>
                     <span>현재 몸무게</span>
                     <strong class="text-blue">${plan.currentWeightKg.toFixed(2)}kg</strong>
                 </div>
                 <div>
-                    <span>${plan.currentWeekNumber}주차 목표</span>
-                    <strong class="${plan.isThisWeekGoalFailed ? "text-danger" : "text-lime"}">${plan.thisWeekTargetWeightKg.toFixed(2)}kg ${plan.isThisWeekGoalSuccess ? "(성공)" : plan.isThisWeekGoalFailed ? "(실패)" : ""}</strong>
+                    <span>오늘 목표까지</span>
+                    <strong class="${plan.isTodayGoalAchieved ? "text-lime" : "text-warning"}">${todayGoalSign}</strong>
                 </div>
             </div>
         `;
@@ -843,18 +869,21 @@ class GymRatApp {
             pastRowsEl.innerHTML = timelineItems
                 .map((item, idx) => {
                     if (item.isMissed) {
+                        const missedDailyInfo = plan.getDailyTargetForDate ? plan.getDailyTargetForDate(item.recordDate) : null;
+                        const targetW = missedDailyInfo ? missedDailyInfo.dailyTargetWeightKg : null;
+                        const dayIdxText = missedDailyInfo ? ` ${missedDailyInfo.dayIndexInWeek}일` : "";
                         return `
                 <div class="roadmap-row missed-record-row">
                     <div>
                         <div class="roadmap-week-title-row">
-                            <strong>${item.weekNumber}주차</strong>
+                            <strong>${item.weekNumber}주차${dayIdxText}</strong>
                             <span class="catchup-badge" style="background: rgba(255, 166, 87, 0.2); color: var(--warning-orange); border-color: rgba(255, 166, 87, 0.4);">기록 누락</span>
                         </div>
                         <span class="roadmap-sub">${item.recordDate}</span>
                     </div>
                     <div>
                         <strong style="color: var(--text-secondary); font-size: 13px;">미입력</strong>
-                        <span class="roadmap-sub">체중 데이터 없음</span>
+                        <span class="roadmap-sub">일별 목표 <strong>${targetW ? `${targetW.toFixed(2)}kg` : "-"}</strong></span>
                     </div>
                     <div>
                         <button type="button" class="btn-enter-missed js-enter-missed-date" data-missed-date="${item.recordDate}">기입하기</button>
@@ -866,9 +895,10 @@ class GymRatApp {
                     const rec = item;
                     const deltaSign = rec.deltaWeightKg > 0 ? `+${rec.deltaWeightKg.toFixed(2)}` : rec.deltaWeightKg.toFixed(2);
                     const isLatest = idx === 0;
+                    const dayIdxText = rec.dayIndexInWeek ? ` ${rec.dayIndexInWeek}일` : "";
                     const weekTitle = rec.isStartRecord
                         ? "1주차 (시작일)"
-                        : `${rec.weekNumber}주차 ${isLatest ? "(현재)" : ""}`;
+                        : `${rec.weekNumber}주차${dayIdxText} ${isLatest ? "(최근)" : ""}`;
                     const deltaLabel = rec.isStartRecord ? "시작 기준점" : `${deltaSign} kg`;
                     let statusBadge = "";
                     let inlineBadge = "";
@@ -878,17 +908,19 @@ class GymRatApp {
                     if (rec.isGoalSuccess) {
                         statusBadge = '<span class="roadmap-goal-badge success">성공</span>';
                         inlineBadge = '<span class="roadmap-inline-success">성공</span>';
-                        targetSubText = `${deltaLabel} · 목표(${rec.weekTargetWeightKg.toFixed(2)}kg) 성공`;
+                        targetSubText = rec.isStartRecord
+                            ? deltaLabel
+                            : `일별 목표 ${rec.dailyTargetWeightKg.toFixed(2)}kg 달성 (${deltaLabel})`;
                         subTextClass = "text-lime";
                     } else if (rec.isGoalFailed) {
-                        statusBadge = '<span class="roadmap-goal-badge failure">실패</span>';
-                        inlineBadge = '<span class="roadmap-inline-failure">실패</span>';
-                        targetSubText = `${deltaLabel} · 목표(${rec.weekTargetWeightKg.toFixed(2)}kg) 대비 +${rec.excessKg.toFixed(2)}kg 초과 (실패)`;
+                        statusBadge = '<span class="roadmap-goal-badge failure">초과</span>';
+                        inlineBadge = '<span class="roadmap-inline-failure">초과</span>';
+                        targetSubText = `일별 목표 ${rec.dailyTargetWeightKg.toFixed(2)}kg 대비 +${rec.excessKg.toFixed(2)}kg (${deltaLabel})`;
                         subTextClass = "text-danger";
                     } else if (rec.isStartRecord) {
                         targetSubText = deltaLabel;
                     } else {
-                        targetSubText = `${deltaLabel} (목표 ${rec.weekTargetWeightKg.toFixed(2)}kg)`;
+                        targetSubText = `일별 목표 ${rec.dailyTargetWeightKg.toFixed(2)}kg (${deltaLabel})`;
                     }
 
                     const rowClassList = [
@@ -931,10 +963,60 @@ class GymRatApp {
             });
         }
 
-        // 2) 이후 주차별 예상 몸무게 시뮬레이션 렌더링
+        // 2) 이후 감량 로드맵 (매일매일 일별 보기 / 주차별 요약 보기)
         const futureRowsEl = document.getElementById("roadmap-future-rows");
-        futureRowsEl.innerHTML = plan.futureWeeklyRoadmap
-            .map(step => {
+        const futureTableHeadEl = document.getElementById("roadmap-future-table-head");
+        const isDailyMode = this.futureRoadmapViewMode === "daily";
+
+        const btnFutureDaily = document.getElementById("btn-future-view-daily");
+        const btnFutureWeekly = document.getElementById("btn-future-view-weekly");
+        if (btnFutureDaily && btnFutureWeekly) {
+            btnFutureDaily.className = isDailyMode ? "btn-roadmap-toggle active" : "btn-roadmap-toggle";
+            btnFutureWeekly.className = !isDailyMode ? "btn-roadmap-toggle active" : "btn-roadmap-toggle";
+        }
+
+        if (isDailyMode) {
+            if (futureTableHeadEl) {
+                futureTableHeadEl.innerHTML = `
+                    <span>날짜 (요일/주차)</span>
+                    <span>일일 권장 감량</span>
+                    <span>해당일 목표 체중</span>
+                `;
+            }
+            futureRowsEl.innerHTML = (plan.futureDailyRoadmap || []).map(day => {
+                const todayBadge = day.isToday ? '<span class="roadmap-today-badge">오늘</span>' : '';
+                const rowClassList = [
+                    "roadmap-row",
+                    day.isToday ? "today-row-highlight" : "",
+                    day.isWeekEnd ? "weekend-milestone-row" : ""
+                ].filter(Boolean).join(" ");
+
+                return `
+                <div class="${rowClassList}">
+                    <div>
+                        <strong>${day.dateText} ${todayBadge}</strong>
+                        <span class="roadmap-sub">${day.weekText}</span>
+                    </div>
+                    <div>
+                        <strong class="text-warning">-${day.dailyLossKg.toFixed(2)} kg</strong>
+                        <span class="roadmap-sub">${day.note}</span>
+                    </div>
+                    <div>
+                        <strong class="text-lime">${day.expectedWeightKg.toFixed(2)} kg</strong>
+                        <span class="roadmap-sub">${day.isWeekEnd ? `${day.weekNumber}주차 완료 목표` : `예상 체지방률 ${day.expectedFatPercent.toFixed(1)}%`}</span>
+                    </div>
+                </div>
+            `;
+            }).join("");
+        } else {
+            if (futureTableHeadEl) {
+                futureTableHeadEl.innerHTML = `
+                    <span>주차 (기간)</span>
+                    <span>주간 목표 감량</span>
+                    <span>예상 도달 몸무게</span>
+                `;
+            }
+            futureRowsEl.innerHTML = (plan.futureWeeklyRoadmap || []).map(step => {
                 let lossSubText = "안전 감량폭";
                 let lossSubClass = "roadmap-sub";
                 if (step.additionalLoss > 0) {
@@ -962,8 +1044,8 @@ class GymRatApp {
                     </div>
                 </div>
             `;
-            })
-            .join("");
+            }).join("");
+        }
     }
 
     openBodyRecordModal(targetDateStr = null) {
