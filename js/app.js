@@ -778,12 +778,12 @@ class GymRatApp {
                     : '<span class="catchup-badge">목표 미달성 보정 플랜</span>';
 
                 const titleHtml = isNone
-                    ? `<strong style="font-size: 13.5px; color: var(--text-secondary);">초과분(+${plan.excessWeightKg.toFixed(2)}kg) 무리한 추가 결핍 없이 기본 안전 속도로 진행</strong>`
+                    ? `<strong style="font-size: 13.5px; color: var(--text-secondary);">초과분(+${plan.excessWeightKg.toFixed(2)}kg) 무리한 추가 결핍 없이 1주차 시작 기준점 원래 목표 로드맵으로 진행</strong>`
                     : `<strong style="font-size: 13.5px; color: var(--coral-danger);">${plan.currentWeekNumber}주차 목표 대비 +${plan.excessWeightKg.toFixed(2)}kg 초과 (실패)</strong>`;
 
                 const descHtml = isNone
-                    ? `목표 미달성 보정 플랜이 해지되어 원래의 기본 안전 감량 페이스(주당 -${plan.weeklyTargetLossKg.toFixed(2)}kg)로 복원되었습니다. 추가 보정 감량을 다시 적용하려면 아래 집중 또는 분산 플랜을 선택하세요.`
-                    : `1주차 목표 감량치를 달성하지 못했습니다. 초과된 <strong>+${plan.excessWeightKg.toFixed(2)}kg</strong>을 다음 1주일 동안 빠르게 보정 감량할지, 1달(4주) 동안 무리 없이 분산 감량할지, 또는 보정 플랜을 해지하고 기본 페이스로 원복할지 선택해주세요.`;
+                    ? `목표 미달성 보정 플랜이 해지되어 1주차 시작일(시작 기준점) 기준 원래 목표 로드맵(주당 -${plan.weeklyTargetLossKg.toFixed(2)}kg)으로 원복되었습니다. 추가 보정 감량을 다시 적용하려면 아래 집중 또는 분산 플랜을 선택하세요.`
+                    : `1주차 목표 감량치를 달성하지 못했습니다. 초과된 <strong>+${plan.excessWeightKg.toFixed(2)}kg</strong>을 다음 1주일 동안 빠르게 보정 감량할지, 1달(4주) 동안 무리 없이 분산 감량할지, 또는 보정 플랜을 해지하고 1주차 시작 기준점 원래 플랜으로 원복할지 선택해주세요.`;
 
                 catchupContainer.innerHTML = `
                     <div class="catchup-plan-card">
@@ -807,7 +807,7 @@ class GymRatApp {
                             </button>
                             <button type="button" class="btn-catchup-plan ${isNone ? "active" : ""}" data-mode="NONE">
                                 <span class="catchup-btn-title">보정 플랜 해지 (기본 페이스 복원)</span>
-                                <span class="catchup-btn-meta">초과 체중에 대한 무리한 추가 결핍을 없애고, 과학적 표준 안전 감량폭(<strong>주당 -${plan.weeklyTargetLossKg.toFixed(2)}kg</strong>)으로 페이스를 원복하여 완주</span>
+                                <span class="catchup-btn-meta">초과 체중에 대한 무리한 추가 결핍을 없애고, 1주차 시작 기준점 원래 목표 로드맵(<strong>주당 -${plan.weeklyTargetLossKg.toFixed(2)}kg</strong>)으로 페이스를 원복하여 완주</span>
                                 <span class="catchup-btn-kcal" style="color: var(--text-secondary);">기본 권장 에너지 적자 유지 (추가 결핍 없음)</span>
                             </button>
                         </div>
@@ -827,7 +827,7 @@ class GymRatApp {
                         this.renderWeeklyRoadmapModalContent();
                         await FirebaseSyncService.autoSyncIfActive();
                         if (mode === "NONE") {
-                            this.showToast("보정 플랜이 해지되었습니다. 원래의 기본 안전 감량 페이스로 원복되었습니다.");
+                            this.showToast("보정 플랜이 해지되었습니다. 1주차 시작 기준점 원래 목표 로드맵으로 원복되었습니다.");
                         } else if (mode === "1WEEK") {
                             this.showToast(`1주일 집중 감량 플랜 반영: 다음 주차 목표 -${(plan.weeklyTargetLossKg + plan.excessWeightKg).toFixed(2)}kg (예상 ${(plan.currentWeightKg - (plan.weeklyTargetLossKg + plan.excessWeightKg)).toFixed(2)}kg)`);
                         } else {

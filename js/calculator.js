@@ -894,6 +894,8 @@ export class SafeWeightLossCalculator {
         let simWeight = profileStartWeightKg;
         let simFatMass = this.round2(simWeight * (profile.startBodyFatPercent / 100));
         let activeExcessToCatchup = 0;
+        let catchupWeeksRemaining = 0;
+        let excessPerWeek = 0;
         let wIdx = 1;
 
         while ((isBulkMode ? simWeight < targetWeightKg - 0.05 : simWeight > targetWeightKg + 0.05) && wIdx <= 52) {
@@ -911,13 +913,14 @@ export class SafeWeightLossCalculator {
             );
 
             let addLoss = 0;
-            if (activeExcessToCatchup > 0 && catchupMode !== "NONE") {
-                if (catchupMode === "1WEEK") {
-                    addLoss = activeExcessToCatchup;
-                    activeExcessToCatchup = 0;
-                } else {
-                    addLoss = this.round2(activeExcessToCatchup / 4);
-                }
+            if (catchupMode === "1WEEK" && catchupWeeksRemaining > 0) {
+                addLoss = activeExcessToCatchup;
+                activeExcessToCatchup = 0;
+                catchupWeeksRemaining = 0;
+            } else if (catchupMode === "1MONTH" && catchupWeeksRemaining > 0) {
+                addLoss = Math.min(activeExcessToCatchup, excessPerWeek);
+                activeExcessToCatchup = Math.max(0, this.round2(activeExcessToCatchup - addLoss));
+                catchupWeeksRemaining--;
             }
 
             const stepBaseLoss = profile.customTargetDurationDays ? weeklyTargetLossKg : stepBaseCalc.weeklyTargetLossKg;
@@ -948,6 +951,13 @@ export class SafeWeightLossCalculator {
                 }
                 if (isWFailed) {
                     activeExcessToCatchup = weekExcess;
+                    if (catchupMode === "1WEEK") {
+                        catchupWeeksRemaining = 1;
+                        excessPerWeek = weekExcess;
+                    } else if (catchupMode === "1MONTH") {
+                        catchupWeeksRemaining = 4;
+                        excessPerWeek = this.round2(weekExcess / 4);
+                    }
                     if (wIdx === currentWeekNumber - 1 || (wIdx === currentWeekNumber && isWFinished)) {
                         isPreviousWeekGoalFailed = true;
                         excessWeightKg = weekExcess;
@@ -972,7 +982,12 @@ export class SafeWeightLossCalculator {
                 catchupMode
             });
 
-            simWeight = isWFinished ? actualEndWeight : weekTargetW;
+            // 보정 플랜이 해지된 경우(NONE)에는 이전 완료 주차의 실제 측정 몸무게로 시작 기준점을 변경하지 않고 1주차 시작 기준점의 원래 목표 로드맵 궤적을 엄격히 유지
+            if (catchupMode !== "NONE" && isWFinished) {
+                simWeight = actualEndWeight;
+            } else {
+                simWeight = weekTargetW;
+            }
             simFatMass = this.round2(Math.max(5, simFatMass - stepLoss * 0.9));
             wIdx++;
         }
@@ -999,9 +1014,13 @@ export class SafeWeightLossCalculator {
             const dCur = parseLocalDate(targetDStr);
             const dayOffset = Math.max(0, Math.min(6, Math.floor((dCur.getTime() - dStart.getTime()) / 86400000)));
 
+            const dailyStep = isBulkMode
+                ? (wInfo.targetWeightKg - wInfo.startWeightKg) / 7
+                : (wInfo.startWeightKg - wInfo.targetWeightKg) / 7;
+
             let dailyTargetW = isBulkMode
-                ? this.round2(wInfo.startWeightKg + wInfo.dailyLossKg * (dayOffset + 1))
-                : this.round2(wInfo.startWeightKg - wInfo.dailyLossKg * (dayOffset + 1));
+                ? this.round2(wInfo.startWeightKg + dailyStep * (dayOffset + 1))
+                : this.round2(wInfo.startWeightKg - dailyStep * (dayOffset + 1));
 
             if (dayOffset === 6) {
                 dailyTargetW = wInfo.targetWeightKg;
