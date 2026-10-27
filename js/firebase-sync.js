@@ -165,9 +165,15 @@ export class FirebaseSyncService {
             if (docResult.exists && docResult.data) {
                 const mergedResult = GymRatStorage.importUserDataJson(docResult.data);
                 const now = Date.now();
+                const profile = GymRatStorage.getProfile();
                 const updatedPayload = {
                     ...mergedResult,
+                    profile,
+                    profileUpdatedAt: Number(profile.updatedAt || now),
                     customMeals: GymRatStorage.getCustomOnboardMeals() || [],
+                    customMealsUpdatedAt: Number(localStorage.getItem("gymrat_custom_meals_updated_at") || now),
+                    customRoutines: GymRatStorage.getCustomRoutines(),
+                    customRoutinesUpdatedAt: Number(localStorage.getItem("gymrat_custom_routines_updated_at") || now),
                     syncKey,
                     nickname: cleanNickDisplay,
                     updatedAt: now

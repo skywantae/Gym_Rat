@@ -10,6 +10,8 @@ const STORAGE_KEYS = {
     PROFILE_BACKUP: "gymrat_user_profile_backup",
     CUSTOM_ROUTINES: "gymrat_custom_routines_v1",
     CUSTOM_ROUTINES_BACKUP: "gymrat_custom_routines_backup",
+    CUSTOM_MEALS: "gymrat_custom_meals",
+    CUSTOM_MEALS_BACKUP: "gymrat_custom_meals_backup",
     WEIGHT_RECORDS: "gymrat_weight_records_v1",
     WEIGHT_RECORDS_BACKUP: "gymrat_weight_records_backup",
     DIET_RECORDS: "gymrat_diet_records_v1",
@@ -1255,6 +1257,14 @@ export class GymRatStorage {
         if (!localStorage.getItem(STORAGE_KEYS.DAILY_CHECKLISTS)) {
             localStorage.setItem(STORAGE_KEYS.DAILY_CHECKLISTS, JSON.stringify({}));
         }
+
+        const primaryMeals = safeParseArray(localStorage.getItem(STORAGE_KEYS.CUSTOM_MEALS));
+        const backupMeals = safeParseArray(localStorage.getItem(STORAGE_KEYS.CUSTOM_MEALS_BACKUP));
+        if (!primaryMeals && backupMeals) {
+            localStorage.setItem(STORAGE_KEYS.CUSTOM_MEALS, JSON.stringify(backupMeals));
+        } else if (primaryMeals && !backupMeals) {
+            localStorage.setItem(STORAGE_KEYS.CUSTOM_MEALS_BACKUP, JSON.stringify(primaryMeals));
+        }
     }
 
     static getProfile() {
@@ -1266,7 +1276,7 @@ export class GymRatStorage {
     }
 
     static saveProfile(profile) {
-        const merged = { ...DEFAULT_USER_PROFILE, ...profile };
+        const merged = { ...DEFAULT_USER_PROFILE, ...profile, updatedAt: profile.updatedAt || Date.now() };
         const serialized = JSON.stringify(merged);
         localStorage.setItem(STORAGE_KEYS.PROFILE, serialized);
         localStorage.setItem(STORAGE_KEYS.PROFILE_BACKUP, serialized);
@@ -1274,14 +1284,18 @@ export class GymRatStorage {
 
     static getCustomOnboardMeals() {
         this.ensureSeeded();
-        const saved = safeParseArray(localStorage.getItem("gymrat_custom_meals"));
+        const saved = safeParseArray(localStorage.getItem(STORAGE_KEYS.CUSTOM_MEALS)) ||
+            safeParseArray(localStorage.getItem(STORAGE_KEYS.CUSTOM_MEALS_BACKUP));
         if (saved && saved.length > 0) return saved;
         return null;
     }
 
     static saveCustomOnboardMeals(meals) {
         if (!meals || !Array.isArray(meals)) return;
-        localStorage.setItem("gymrat_custom_meals", JSON.stringify(meals));
+        const serialized = JSON.stringify(meals);
+        localStorage.setItem(STORAGE_KEYS.CUSTOM_MEALS, serialized);
+        localStorage.setItem(STORAGE_KEYS.CUSTOM_MEALS_BACKUP, serialized);
+        localStorage.setItem("gymrat_custom_meals_updated_at", String(Date.now()));
     }
 
     static getCustomRoutines() {
@@ -1317,6 +1331,7 @@ export class GymRatStorage {
         const serialized = JSON.stringify(merged);
         localStorage.setItem(STORAGE_KEYS.CUSTOM_ROUTINES, serialized);
         localStorage.setItem(STORAGE_KEYS.CUSTOM_ROUTINES_BACKUP, serialized);
+        localStorage.setItem("gymrat_custom_routines_updated_at", String(Date.now()));
 
         // 오늘 이미 등록된 고정 식단 루틴이 있다면 수정된 칼로리/영양소 수치로 즉시 동기화
         if (dateStrToSync) {
@@ -1563,12 +1578,16 @@ export class GymRatStorage {
      */
     static exportUserDataJson() {
         this.ensureSeeded();
+        const profile = this.getProfile();
         return {
             exportedAt: Date.now(),
             version: "1.2.0",
-            profile: this.getProfile(),
+            profile,
+            profileUpdatedAt: Number(profile.updatedAt || 0),
             customRoutines: this.getCustomRoutines(),
+            customRoutinesUpdatedAt: Number(localStorage.getItem("gymrat_custom_routines_updated_at") || 0),
             customMeals: this.getCustomOnboardMeals() || [],
+            customMealsUpdatedAt: Number(localStorage.getItem("gymrat_custom_meals_updated_at") || 0),
             weightRecords: this.getWeightRecords(),
             dietRecords: safeParseArray(localStorage.getItem(STORAGE_KEYS.DIET_RECORDS)) || [],
             dailyChecklists: safeParseObject(localStorage.getItem(STORAGE_KEYS.DAILY_CHECKLISTS)) || {},
@@ -1608,10 +1627,19 @@ export class GymRatStorage {
         localStorage.setItem(STORAGE_KEYS.WEIGHT_RECORDS, JSON.stringify(mergedWeights));
         localStorage.setItem(STORAGE_KEYS.WEIGHT_RECORDS_BACKUP, JSON.stringify(mergedWeights));
 
-        // 2. 프로필 병합
+        // 2. 프로필 병합 (타임스탬프 비교로 로컬 최신 설정 보존)
         const currentProfile = this.getProfile();
         const incomingProfile = incomingData.profile && typeof incomingData.profile === "object" ? incomingData.profile : {};
-        const mergedProfile = { ...DEFAULT_USER_PROFILE, ...currentProfile, ...incomingProfile };
+        const localProfileUpdatedAt = Number(currentProfile.updatedAt || 0);
+        const incomingProfileUpdatedAt = Number(incomingData.profileUpdatedAt || incomingProfile.updatedAt || 0);
+
+        let mergedProfile;
+        if (localProfileUpdatedAt >= incomingProfileUpdatedAt && currentProfile.onboardingCompleted) {
+            mergedProfile = { ...DEFAULT_USER_PROFILE, ...incomingProfile, ...currentProfile };
+        } else {
+            mergedProfile = { ...DEFAULT_USER_PROFILE, ...currentProfile, ...incomingProfile };
+        }
+
         if (mergedWeights.length > 0) {
             mergedProfile.startWeightKg = Number(mergedWeights[0].weightKg);
             mergedProfile.startSkeletalMuscleKg = Number(mergedWeights[0].skeletalMuscleMassKg);
@@ -1642,23 +1670,50 @@ export class GymRatStorage {
             mergedProfile.heightCm = currentProfile.heightCm;
         }
 
-        if (currentProfile.missedGoalCatchupMode || incomingProfile.missedGoalCatchupMode) {
-            mergedProfile.missedGoalCatchupMode = currentProfile.missedGoalCatchupMode || incomingProfile.missedGoalCatchupMode;
+        // missedGoalCatchupMode 병합 (로컬이 최신이면 로컬 모드 우선 보존)
+        if (localProfileUpdatedAt >= incomingProfileUpdatedAt) {
+            if (currentProfile.missedGoalCatchupMode !== undefined) {
+                mergedProfile.missedGoalCatchupMode = currentProfile.missedGoalCatchupMode;
+            }
+        } else {
+            if (incomingProfile.missedGoalCatchupMode !== undefined) {
+                mergedProfile.missedGoalCatchupMode = incomingProfile.missedGoalCatchupMode;
+            } else if (currentProfile.missedGoalCatchupMode !== undefined) {
+                mergedProfile.missedGoalCatchupMode = currentProfile.missedGoalCatchupMode;
+            }
         }
 
+        mergedProfile.updatedAt = Math.max(localProfileUpdatedAt, incomingProfileUpdatedAt, Date.now());
         this.saveProfile(mergedProfile);
 
-        // 3. 맞춤 식습관 목록 병합
-        if (incomingData.customMeals && Array.isArray(incomingData.customMeals) && incomingData.customMeals.length > 0) {
+        // 3. 맞춤 식습관 목록 병합 (타임스탬프 비교로 로컬 재설정 식단 보존)
+        const localMealsUpdatedAt = Number(localStorage.getItem("gymrat_custom_meals_updated_at") || 0);
+        const incomingMealsUpdatedAt = Number(incomingData.customMealsUpdatedAt || 0);
+        const localMeals = this.getCustomOnboardMeals();
+
+        if (localMeals && localMeals.length > 0 && localMealsUpdatedAt >= incomingMealsUpdatedAt) {
+            // 로컬 식습관 설정이 더 최신이거나 같으므로 보존
+        } else if (incomingData.customMeals && Array.isArray(incomingData.customMeals) && incomingData.customMeals.length > 0) {
             this.saveCustomOnboardMeals(incomingData.customMeals);
+            if (incomingMealsUpdatedAt > 0) {
+                localStorage.setItem("gymrat_custom_meals_updated_at", String(incomingMealsUpdatedAt));
+            }
         }
 
         // 4. 고정 식단 루틴 병합
-        if (incomingData.customRoutines && typeof incomingData.customRoutines === "object") {
+        const localRoutinesUpdatedAt = Number(localStorage.getItem("gymrat_custom_routines_updated_at") || 0);
+        const incomingRoutinesUpdatedAt = Number(incomingData.customRoutinesUpdatedAt || 0);
+
+        if (localRoutinesUpdatedAt >= incomingRoutinesUpdatedAt && localStorage.getItem(STORAGE_KEYS.CUSTOM_ROUTINES)) {
+            // 로컬 루틴이 더 최신이거나 같으므로 보존
+        } else if (incomingData.customRoutines && typeof incomingData.customRoutines === "object") {
             this.saveCustomRoutines(incomingData.customRoutines);
+            if (incomingRoutinesUpdatedAt > 0) {
+                localStorage.setItem("gymrat_custom_routines_updated_at", String(incomingRoutinesUpdatedAt));
+            }
         }
 
-        // 4. 식단 기록 병합
+        // 5. 식단 기록 병합
         const localDiets = safeParseArray(localStorage.getItem(STORAGE_KEYS.DIET_RECORDS)) || [];
         const incomingDiets = Array.isArray(incomingData.dietRecords) ? incomingData.dietRecords : [];
         const dietMap = new Map();
@@ -1671,7 +1726,7 @@ export class GymRatStorage {
         const mergedDiets = Array.from(dietMap.values());
         localStorage.setItem(STORAGE_KEYS.DIET_RECORDS, JSON.stringify(mergedDiets));
 
-        // 5. 체크리스트 병합
+        // 6. 체크리스트 병합
         const localChecklists = safeParseObject(localStorage.getItem(STORAGE_KEYS.DAILY_CHECKLISTS)) || {};
         const incomingChecklists = incomingData.dailyChecklists && typeof incomingData.dailyChecklists === "object"
             ? incomingData.dailyChecklists
@@ -1679,7 +1734,7 @@ export class GymRatStorage {
         const mergedChecklists = { ...localChecklists, ...incomingChecklists };
         localStorage.setItem(STORAGE_KEYS.DAILY_CHECKLISTS, JSON.stringify(mergedChecklists));
 
-        // 6. 운동 기록 병합
+        // 7. 운동 기록 병합
         const localWorkouts = safeParseArray(localStorage.getItem(STORAGE_KEYS.WORKOUT_RECORDS)) || [];
         const incomingWorkouts = Array.isArray(incomingData.workoutRecords) ? incomingData.workoutRecords : [];
         const workoutMap = new Map();
@@ -1742,7 +1797,10 @@ export class GymRatStorage {
         localStorage.setItem(STORAGE_KEYS.DIET_RECORDS, JSON.stringify([]));
         localStorage.setItem(STORAGE_KEYS.WORKOUT_RECORDS, JSON.stringify([]));
         localStorage.setItem(STORAGE_KEYS.DAILY_CHECKLISTS, JSON.stringify({}));
-        localStorage.removeItem("gymrat_custom_meals");
+        localStorage.removeItem(STORAGE_KEYS.CUSTOM_MEALS);
+        localStorage.removeItem(STORAGE_KEYS.CUSTOM_MEALS_BACKUP);
+        localStorage.removeItem("gymrat_custom_meals_updated_at");
+        localStorage.removeItem("gymrat_custom_routines_updated_at");
     }
 
     /**

@@ -911,7 +911,7 @@ export class SafeWeightLossCalculator {
             );
 
             let addLoss = 0;
-            if (activeExcessToCatchup > 0) {
+            if (activeExcessToCatchup > 0 && catchupMode !== "NONE") {
                 if (catchupMode === "1WEEK") {
                     addLoss = activeExcessToCatchup;
                     activeExcessToCatchup = 0;
@@ -1123,7 +1123,8 @@ export class SafeWeightLossCalculator {
         }).reverse();
 
         // 1주차 목표 미달성 시 만회 코스 수치
-        const isThisWeekGoalFailed = isPreviousWeekGoalFailed;
+        const isThisWeekGoalFailed = isPreviousWeekGoalFailed && catchupMode !== "NONE";
+        const isCatchupDismissed = isPreviousWeekGoalFailed && catchupMode === "NONE";
         const excessPerWeekMonth = this.round2(excessWeightKg / 4);
         const catchupKcal1Week = Math.round((excessWeightKg * 7700) / 7);
         const catchupKcal1Month = Math.round((excessWeightKg * 7700) / 28);
@@ -1171,6 +1172,8 @@ export class SafeWeightLossCalculator {
                 note = `${dayInfo.weekNumber}주차 완료 목표`;
             } else if (dayInfo.weekNumber === currentWeekNumber && currentWeekInfo.additionalLoss > 0) {
                 note = catchupMode === "1WEEK" ? "1주 집중 보정" : "4주 분산 보정";
+            } else if (dayInfo.weekNumber === currentWeekNumber && isCatchupDismissed) {
+                note = "기본 안전 감량 페이스";
             }
 
             futureDailyRoadmap.push({
@@ -1270,6 +1273,8 @@ export class SafeWeightLossCalculator {
             weeklyProgressRatio,
             isThisWeekGoalSuccess,
             isThisWeekGoalFailed,
+            isPreviousWeekGoalFailed,
+            isCatchupDismissed,
             excessWeightKg,
             catchupMode,
             catchupKcal1Week,

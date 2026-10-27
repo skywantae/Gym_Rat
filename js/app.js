@@ -440,6 +440,9 @@ class GymRatApp {
             const catchupLabel = plan.catchupMode === "1WEEK" ? "1주 집중 보정" : "4주 분산 보정";
             weekPill.textContent = `${plan.currentWeekNumber}주차 진행 중 (${catchupLabel})`;
             weekPill.className = "week-status-pill failure";
+        } else if (plan.isCatchupDismissed) {
+            weekPill.textContent = `${plan.currentWeekNumber}주차 ${plan.todayDayIndexInWeek}일차 (기본 페이스)`;
+            weekPill.className = "week-status-pill";
         } else if (plan.isTodayGoalAchieved) {
             weekPill.textContent = `${plan.currentWeekNumber}주차 ${plan.todayDayIndexInWeek}일차 (오늘 목표 달성)`;
             weekPill.className = "week-status-pill success";
@@ -729,6 +732,8 @@ class GymRatApp {
             weekStatusBadge = '<span class="roadmap-goal-badge success">오늘 목표 달성</span>';
         } else if (plan.isThisWeekGoalFailed) {
             weekStatusBadge = '<span class="roadmap-goal-badge failure">보정 감량 진행</span>';
+        } else if (plan.isCatchupDismissed) {
+            weekStatusBadge = '<span class="roadmap-goal-badge" style="background: rgba(148, 163, 184, 0.2); color: #cbd5e1; border: 1px solid rgba(148, 163, 184, 0.35);">기본 안전 페이스</span>';
         }
 
         const bannerEl = document.getElementById("roadmap-current-week-banner");
@@ -760,21 +765,34 @@ class GymRatApp {
             </div>
         `;
 
-        // 1주차 목표 미달성 시 1주일 vs 1달 보정 감량 선택 UI 컨테이너
+        // 1주차 목표 미달성 시 1주일 vs 1달 보정 감량 선택 또는 원복 UI 컨테이너
         const catchupContainer = document.getElementById("roadmap-catchup-container");
         if (catchupContainer) {
-            if (plan.isThisWeekGoalFailed) {
+            if (plan.isPreviousWeekGoalFailed) {
                 const is1Week = plan.catchupMode === "1WEEK";
+                const is1Month = plan.catchupMode === "1MONTH";
+                const isNone = plan.catchupMode === "NONE";
+
+                const badgeHtml = isNone
+                    ? '<span class="catchup-badge" style="background: rgba(148, 163, 184, 0.15); border-color: rgba(148, 163, 184, 0.4); color: #cbd5e1;">보정 플랜 해지됨 (기본 안전 감량 페이스 진행)</span>'
+                    : '<span class="catchup-badge">목표 미달성 보정 플랜</span>';
+
+                const titleHtml = isNone
+                    ? `<strong style="font-size: 13.5px; color: var(--text-secondary);">초과분(+${plan.excessWeightKg.toFixed(2)}kg) 무리한 추가 결핍 없이 기본 안전 속도로 진행</strong>`
+                    : `<strong style="font-size: 13.5px; color: var(--coral-danger);">${plan.currentWeekNumber}주차 목표 대비 +${plan.excessWeightKg.toFixed(2)}kg 초과 (실패)</strong>`;
+
+                const descHtml = isNone
+                    ? `목표 미달성 보정 플랜이 해지되어 원래의 기본 안전 감량 페이스(주당 -${plan.weeklyTargetLossKg.toFixed(2)}kg)로 복원되었습니다. 추가 보정 감량을 다시 적용하려면 아래 집중 또는 분산 플랜을 선택하세요.`
+                    : `1주차 목표 감량치를 달성하지 못했습니다. 초과된 <strong>+${plan.excessWeightKg.toFixed(2)}kg</strong>을 다음 1주일 동안 빠르게 보정 감량할지, 1달(4주) 동안 무리 없이 분산 감량할지, 또는 보정 플랜을 해지하고 기본 페이스로 원복할지 선택해주세요.`;
+
                 catchupContainer.innerHTML = `
                     <div class="catchup-plan-card">
                         <div class="catchup-header">
-                            <span class="catchup-badge">목표 미달성 보정 플랜</span>
-                            <strong style="font-size: 13.5px; color: var(--coral-danger);">
-                                ${plan.currentWeekNumber}주차 목표 대비 +${plan.excessWeightKg.toFixed(2)}kg 초과 (실패)
-                            </strong>
+                            ${badgeHtml}
+                            ${titleHtml}
                         </div>
                         <p class="catchup-desc">
-                            1주차 목표 감량치를 달성하지 못했습니다. 초과된 <strong>+${plan.excessWeightKg.toFixed(2)}kg</strong>을 다음 1주일 동안 빠르게 보정 감량할지, 1달(4주) 동안 무리 없이 분산 감량할지 선택해주세요.
+                            ${descHtml}
                         </p>
                         <div class="catchup-options-grid">
                             <button type="button" class="btn-catchup-plan ${is1Week ? "active" : ""}" data-mode="1WEEK">
@@ -782,10 +800,15 @@ class GymRatApp {
                                 <span class="catchup-btn-meta">다음 주차에 기본 감량폭(-${plan.weeklyTargetLossKg.toFixed(2)}kg)에 초과분(-${plan.excessWeightKg.toFixed(2)}kg)을 더해 <strong>총 -${(plan.weeklyTargetLossKg + plan.excessWeightKg).toFixed(2)}kg</strong> 즉시 감량</span>
                                 <span class="catchup-btn-kcal">일일 추가 약 -${plan.catchupKcal1Week.toLocaleString()} kcal 적자 권장</span>
                             </button>
-                            <button type="button" class="btn-catchup-plan ${!is1Week ? "active" : ""}" data-mode="1MONTH">
+                            <button type="button" class="btn-catchup-plan ${is1Month ? "active" : ""}" data-mode="1MONTH">
                                 <span class="catchup-btn-title">1달(4주) 분산 감량 플랜</span>
                                 <span class="catchup-btn-meta">향후 4주에 걸쳐 매주 초과분의 1/4(-${plan.excessPerWeekMonth.toFixed(2)}kg)씩 나누어 <strong>매주 -${(plan.weeklyTargetLossKg + plan.excessPerWeekMonth).toFixed(2)}kg</strong> 안전 분산 감량</span>
                                 <span class="catchup-btn-kcal">일일 추가 약 -${plan.catchupKcal1Month.toLocaleString()} kcal 적자 권장</span>
+                            </button>
+                            <button type="button" class="btn-catchup-plan ${isNone ? "active" : ""}" data-mode="NONE">
+                                <span class="catchup-btn-title">보정 플랜 해지 (기본 페이스 복원)</span>
+                                <span class="catchup-btn-meta">초과 체중에 대한 무리한 추가 결핍을 없애고, 과학적 표준 안전 감량폭(<strong>주당 -${plan.weeklyTargetLossKg.toFixed(2)}kg</strong>)으로 페이스를 원복하여 완주</span>
+                                <span class="catchup-btn-kcal" style="color: var(--text-secondary);">기본 권장 에너지 적자 유지 (추가 결핍 없음)</span>
                             </button>
                         </div>
                     </div>
@@ -796,17 +819,20 @@ class GymRatApp {
                         const mode = btn.dataset.mode;
                         const currProfile = GymRatStorage.getProfile();
                         currProfile.missedGoalCatchupMode = mode;
+                        currProfile.updatedAt = Date.now();
                         GymRatStorage.saveProfile(currProfile);
                         // 선택 즉시 이후 주차별 예상 몸무게 탭으로 자동 전환하여 변화를 체감할 수 있도록 함
                         this.roadmapSubTab = "future";
                         this.renderAll();
                         this.renderWeeklyRoadmapModalContent();
                         await FirebaseSyncService.autoSyncIfActive();
-                        this.showToast(
-                            mode === "1WEEK"
-                                ? `1주일 집중 감량 플랜 반영: 다음 주차 목표 -${(plan.weeklyTargetLossKg + plan.excessWeightKg).toFixed(2)}kg (예상 ${(plan.currentWeightKg - (plan.weeklyTargetLossKg + plan.excessWeightKg)).toFixed(2)}kg)`
-                                : `1달(4주) 분산 감량 플랜 반영: 다음 주차 목표 -${(plan.weeklyTargetLossKg + plan.excessPerWeekMonth).toFixed(2)}kg (예상 ${(plan.currentWeightKg - (plan.weeklyTargetLossKg + plan.excessPerWeekMonth)).toFixed(2)}kg)`
-                        );
+                        if (mode === "NONE") {
+                            this.showToast("보정 플랜이 해지되었습니다. 원래의 기본 안전 감량 페이스로 원복되었습니다.");
+                        } else if (mode === "1WEEK") {
+                            this.showToast(`1주일 집중 감량 플랜 반영: 다음 주차 목표 -${(plan.weeklyTargetLossKg + plan.excessWeightKg).toFixed(2)}kg (예상 ${(plan.currentWeightKg - (plan.weeklyTargetLossKg + plan.excessWeightKg)).toFixed(2)}kg)`);
+                        } else {
+                            this.showToast(`1달(4주) 분산 감량 플랜 반영: 다음 주차 목표 -${(plan.weeklyTargetLossKg + plan.excessPerWeekMonth).toFixed(2)}kg (예상 ${(plan.currentWeightKg - (plan.weeklyTargetLossKg + plan.excessPerWeekMonth)).toFixed(2)}kg)`);
+                        }
                     });
                 });
             } else {
@@ -1319,8 +1345,15 @@ class GymRatApp {
      * 식습관 식품 조합기 모달 오픈 및 렌더링
      */
     openHabitBuilderModal() {
-        this.initDefaultOnboardMeals();
+        const savedMeals = GymRatStorage.getCustomOnboardMeals();
+        if (savedMeals && Array.isArray(savedMeals) && savedMeals.length > 0) {
+            this.onboardMeals = savedMeals.map(m => this.recalculateMealNutrients(m));
+            this.ensureSupplementsInMeals();
+        } else {
+            this.initDefaultOnboardMeals();
+        }
         this.renderMealSlots("modal-meal-slots-container", true);
+        this.updateDietSummary(true);
         const modal = document.getElementById("modal-habit-builder");
         if (modal) modal.classList.remove("hidden");
     }
@@ -1328,10 +1361,11 @@ class GymRatApp {
     /**
      * 식습관 식품 조합기 모달 저장 처리
      */
-    handleSaveModalMeals() {
+    async handleSaveModalMeals() {
         if (!this.onboardMeals || this.onboardMeals.length === 0) {
             this.initDefaultOnboardMeals();
         }
+        this.onboardMeals.forEach(m => this.recalculateMealNutrients(m));
         GymRatStorage.saveCustomOnboardMeals(this.onboardMeals);
 
         const bfMeal = this.onboardMeals.find(m => /아침/i.test(m.name)) || this.onboardMeals[0];
@@ -1376,8 +1410,12 @@ class GymRatApp {
             this.todayStr
         );
 
+        const profile = GymRatStorage.getProfile();
+        profile.updatedAt = Date.now();
+        GymRatStorage.saveProfile(profile);
+
         this.renderDashboardScreen();
-        FirebaseSyncService.autoSyncIfActive();
+        await FirebaseSyncService.autoSyncIfActive();
         this.closeAllModals();
         this.showToast("식습관 식품 구성 및 일평균 영양 기준이 저장되었습니다.");
     }
@@ -1389,7 +1427,11 @@ class GymRatApp {
         const container = document.getElementById("dashboard-diet-summary-list");
         if (!container) return;
 
-        if (!this.onboardMeals || this.onboardMeals.length === 0) {
+        const savedMeals = GymRatStorage.getCustomOnboardMeals();
+        if (savedMeals && Array.isArray(savedMeals) && savedMeals.length > 0) {
+            this.onboardMeals = savedMeals.map(m => this.recalculateMealNutrients(m));
+            this.ensureSupplementsInMeals();
+        } else {
             this.initDefaultOnboardMeals();
         }
 
